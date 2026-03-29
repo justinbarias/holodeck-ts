@@ -12,6 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - CLI infrastructure (Commander): **Planned**
 - Agent execution (Claude Agent SDK): **Planned**
+- Structured output (schema-enforced responses): **Planned**
 - Evaluation framework (Anthropic methodology): **Planned**
 - Chat interface: **Planned**
 - OpenTelemetry integration: **Planned**

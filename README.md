@@ -15,6 +15,7 @@ Build, test, and evaluate AI agents through pure YAML configuration. Built exclu
 
 - **No-code agent definition** — define agents, tools, evaluations, and test cases entirely in YAML
 - **Claude Agent SDK native** — built exclusively on Anthropic's [Claude Agent SDK](https://platform.claude.com/docs/en/agent-sdk/typescript) for TypeScript
+- **Structured output** — schema-enforced agent responses for deterministic, machine-readable output
 - **Interactive chat** (`holodeck chat`) — streaming conversations with your agents
 - **Test runner** (`holodeck test`) — run test cases with [Anthropic-style evaluation](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents)
 - **Hierarchical vectorstore** — contextual retrieval using [Anthropic's methodology](https://www.anthropic.com/engineering/contextual-retrieval)
@@ -434,6 +435,7 @@ bun run typecheck    # tsc --noEmit
 
 - [ ] `holodeck chat` — interactive streaming chat
 - [ ] `holodeck test` — test runner with evaluation
+- [ ] Structured output — schema-enforced agent responses
 - [ ] OpenTelemetry integration
 - [ ] Hierarchical vectorstore with contextual retrieval
 - [ ] MCP server support (stdio, HTTP/SSE)
