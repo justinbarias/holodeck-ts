@@ -80,7 +80,7 @@ claude:
 ```bash
 holodeck chat
 # or specify a config
-holodeck chat path/to/agent.yaml
+holodeck chat --agent path/to/agent.yaml
 ```
 
 ### Test
@@ -259,7 +259,7 @@ observability:
 
 | Command | Description |
 |---|---|
-| `holodeck chat [config]` | Interactive chat session with streaming |
+| `holodeck chat [--agent <path>]` | Interactive chat session with streaming |
 | `holodeck test [config]` | Run test cases with evaluation grading |
 
 **`holodeck test` options:**
@@ -428,7 +428,9 @@ bun run typecheck    # tsc --noEmit
 | Agent SDK | [@anthropic-ai/claude-agent-sdk](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) |
 | Linting/Formatting | [Biome](https://biomejs.dev) |
 | Testing | [Bun test](https://bun.sh/docs/cli/test) |
+| Logging | [LogTape](https://logtape.org/) (OTel-ready via [@logtape/otel](https://logtape.org/sinks/otel)) |
 | Observability | [OpenTelemetry](https://opentelemetry.io/) |
+| Markdown Rendering | [marked](https://marked.js.org/) + [marked-terminal](https://github.com/mikaelbr/marked-terminal) |
 | Config | [yaml](https://www.npmjs.com/package/yaml) + Zod |
 
 ## Roadmap

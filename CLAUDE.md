@@ -117,8 +117,7 @@ holodeck-ts/
 │   │
 │   ├── config/                      # Configuration management
 │   │   ├── loader.ts                # YAML parsing with env var substitution
-│   │   ├── schema.ts                # All Zod schemas (Agent, Tools, Evals, etc.)
-│   │   └── defaults.ts              # Default configuration values
+│   │   └── schema.ts                # All Zod schemas (Agent, Tools, Evals, etc.) with inline defaults
 │   │
 │   ├── agent/                       # Claude Agent SDK integration
 │   │   ├── executor.ts              # query() wrapper with hook registration
@@ -787,3 +786,10 @@ Follow OpenTelemetry [GenAI semantic conventions](https://opentelemetry.io/docs/
 - [Bun Documentation](https://bun.sh/docs)
 - [Biome Documentation](https://biomejs.dev)
 - [Commander Documentation](https://github.com/tj/commander.js)
+
+## Active Technologies
+- TypeScript 5.8.3 (strict, `@tsconfig/bun`) + `@anthropic-ai/claude-agent-sdk` 0.2.87, `commander` 14.0.3, `zod` 4.3.6, `yaml` 2.8.3, `marked` 15.0.12, `marked-terminal` 7.3.0, `remend` 1.3.0, `logtape` 2.0.5 (001-holodeck-chat)
+- In-memory only (session state, no persistence) (001-holodeck-chat)
+
+## Recent Changes
+- 001-holodeck-chat: Added chat feature dependencies (`marked`, `marked-terminal`, `remend`, `logtape`)
