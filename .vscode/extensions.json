@@ -1,0 +1,13 @@
+{
+	"recommendations": [
+		"biomejs.biome",
+		"oven.bun-vscode",
+		"ms-vscode.vscode-typescript-next",
+		"redhat.vscode-yaml",
+		"EditorConfig.EditorConfig"
+	],
+	"unwantedRecommendations": [
+		"esbenp.prettier-vscode",
+		"dbaeumer.vscode-eslint"
+	]
+}
