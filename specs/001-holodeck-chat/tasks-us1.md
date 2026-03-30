@@ -35,27 +35,27 @@ The repository already has:
 
 > Project structure, dependencies, and base configuration. No story label — these are prerequisites for ALL user stories.
 
-- [ ] T001 [P] Install chat feature dependencies (`marked`, `marked-terminal`, `remend`, `logtape`) via `bun add`; verify `package.json` updated
+- [x] T001 [P] Install chat feature dependencies (`marked`, `marked-terminal`, `remend`, `logtape`) via `bun add`; verify `package.json` updated
   - File: `package.json`
   - Blocks: T005, T006, T010
 
-- [ ] T002 [P] Create test fixture `tests/fixtures/agents/valid-minimal.yaml` — minimal valid config (name, model, inline instructions only)
+- [x] T002 [P] Create test fixture `tests/fixtures/agents/valid-minimal.yaml` — minimal valid config (name, model, inline instructions only)
   - File: `tests/fixtures/agents/valid-minimal.yaml`
   - Blocks: T011, T012
 
-- [ ] T003 [P] Create test fixture `tests/fixtures/agents/valid-full.yaml` — full config with all optional fields (description, claude config, tools array)
+- [x] T003 [P] Create test fixture `tests/fixtures/agents/valid-full.yaml` — full config with all optional fields (description, claude config, tools array)
   - File: `tests/fixtures/agents/valid-full.yaml`
   - Blocks: T011, T012
 
-- [ ] T004 [P] Create test fixture `tests/fixtures/agents/invalid-missing.yaml` (missing required `model` field), `tests/fixtures/agents/invalid-types.yaml` (wrong types, e.g., temperature as string), `tests/fixtures/agents/invalid-unknown.yaml` (unknown fields that strict mode rejects)
+- [x] T004 [P] Create test fixture `tests/fixtures/agents/invalid-missing.yaml` (missing required `model` field), `tests/fixtures/agents/invalid-types.yaml` (wrong types, e.g., temperature as string), `tests/fixtures/agents/invalid-unknown.yaml` (unknown fields that strict mode rejects)
   - Files: `tests/fixtures/agents/invalid-missing.yaml`, `tests/fixtures/agents/invalid-types.yaml`, `tests/fixtures/agents/invalid-unknown.yaml`
   - Blocks: T011, T012
 
-- [ ] T005 [P] Create test fixture `tests/fixtures/instructions/system.md` — sample markdown instructions file for `instructions.file` testing
+- [x] T005 [P] Create test fixture `tests/fixtures/instructions/system.md` — sample markdown instructions file for `instructions.file` testing
   - File: `tests/fixtures/instructions/system.md`
   - Blocks: T012
 
-- [ ] T006 Verify project builds and lints cleanly after dependency install: run `bun run typecheck`, `bun run lint`, `bun test`
+- [x] T006 Verify project builds and lints cleanly after dependency install: run `bun run typecheck`, `bun run lint`, `bun test`
   - Depends on: T001
   - Blocks: Phase 2
 
@@ -71,36 +71,36 @@ All fixture files exist. Dependencies installed. Project builds, lints, and type
 
 ### Error Hierarchy + Formatting
 
-- [ ] T007 Write test file `tests/unit/lib/errors.test.ts` — test `HoloDeckError`, `ConfigError`, `ToolError` inheritance and `cause` chaining; test `formatZodError()` produces human-readable multi-line output with field paths and constraint messages; verify formatting includes the file path in the header
+- [x] T007 Write test file `tests/unit/lib/errors.test.ts` — test `HoloDeckError`, `ConfigError`, `ToolError` inheritance and `cause` chaining; test `formatZodError()` produces human-readable multi-line output with field paths and constraint messages; verify formatting includes the file path in the header
   - File: `tests/unit/lib/errors.test.ts`
   - Depends on: T006
   - Blocks: T008
 
-- [ ] T008 Implement `formatZodError(error: ZodError, filePath: string): string` in `src/lib/errors.ts` — format Zod validation errors into human-readable output per the contract (arrow-prefixed field paths, constraint messages). Existing error classes are already implemented; only add `formatZodError`.
+- [x] T008 Implement `formatZodError(error: ZodError, filePath: string): string` in `src/lib/errors.ts` — format Zod validation errors into human-readable output per the contract (arrow-prefixed field paths, constraint messages). Existing error classes are already implemented; only add `formatZodError`.
   - File: `src/lib/errors.ts`
   - Depends on: T007
   - Blocks: T012, T018
 
 ### Logger (LogTape)
 
-- [ ] T009 Write test file `tests/unit/lib/logger.test.ts` — test `setupLogging()` configures LogTape without throwing; test `getModuleLogger("config")` returns a logger with category `["holodeck", "config"]`; test verbose mode sets debug level
+- [x] T009 Write test file `tests/unit/lib/logger.test.ts` — test `setupLogging()` configures LogTape without throwing; test `getModuleLogger("config")` returns a logger with category `["holodeck", "config"]`; test verbose mode sets debug level
   - File: `tests/unit/lib/logger.test.ts`
   - Depends on: T001, T006
   - Blocks: T010
 
-- [ ] T010 Replace placeholder logger in `src/lib/logger.ts` with LogTape implementation — `setupLogging({ verbose: boolean }): Promise<void>` configures a stderr console sink; `getModuleLogger(module: string): Logger` returns logger with category `["holodeck", module]`. Remove old console-based logger.
+- [x] T010 Replace placeholder logger in `src/lib/logger.ts` with LogTape implementation — `setupLogging({ verbose: boolean }): Promise<void>` configures a stderr console sink; `getModuleLogger(module: string): Logger` returns logger with category `["holodeck", module]`. Remove old console-based logger.
   - File: `src/lib/logger.ts`
   - Depends on: T009
   - Blocks: T012, T016, T018
 
 ### Environment Variable Resolution
 
-- [ ] T011 Write test file `tests/unit/lib/env.test.ts` — test `resolveEnvVars()` replaces `${VAR}` with env values; test unset vars resolve to empty string (current behavior) or throw (if contract requires it — check contract); test `loadHolodeckEnv()` loads vars from `~/.holodeck/.env` without overriding existing env; test nested/adjacent substitutions
+- [x] T011 Write test file `tests/unit/lib/env.test.ts` — test `resolveEnvVars()` replaces `${VAR}` with env values; test unset vars resolve to empty string (current behavior) or throw (if contract requires it — check contract); test `loadHolodeckEnv()` loads vars from `~/.holodeck/.env` without overriding existing env; test nested/adjacent substitutions
   - File: `tests/unit/lib/env.test.ts`
   - Depends on: T006
   - Blocks: T012
 
-- [ ] T012 Implement full `src/lib/env.ts` — add `loadHolodeckEnv(): void` (load `~/.holodeck/.env` via Bun's built-in `.env` support or manual parsing, without overriding existing vars). The existing `resolveEnvVars()` handles basic substitution; enhance it to log a warning (via LogTape) for unresolved variables if needed per contract.
+- [x] T012 Implement full `src/lib/env.ts` — add `loadHolodeckEnv(): void` (load `~/.holodeck/.env` via Bun's built-in `.env` support or manual parsing, without overriding existing vars). The existing `resolveEnvVars()` handles basic substitution; enhance it to log a warning (via LogTape) for unresolved variables if needed per contract.
   - File: `src/lib/env.ts`
   - Depends on: T010, T011
   - Blocks: T016
@@ -117,118 +117,118 @@ All foundational modules have passing tests. `formatZodError()` produces readabl
 
 ### Zod Schemas (config/schema.ts)
 
-- [ ] T013 [US1] Write test file `tests/unit/config/schema.test.ts` — test `LLMProviderSchema` accepts valid input and applies defaults (temperature 0.3, max_tokens 1000); test it rejects non-"anthropic" provider, negative max_tokens, temperature > 2; test `InstructionsSchema` XOR constraint (accepts inline-only, accepts file-only, rejects both, rejects neither); test `ClaudeConfigSchema` defaults (permission_mode "manual", web_search false); test `MCPStdioToolSchema` and `MCPHttpToolSchema` discriminated union; test `AgentConfigSchema` with minimal and full fixtures; test strict mode rejects unknown fields; test tool name regex pattern `^[0-9A-Za-z_]+$`. Also test that sub-schemas (`BashConfigSchema`, `FileSystemConfigSchema`, `ExtendedThinkingSchema`, `SubagentsConfigSchema`) are exported and validate correctly with positive and negative cases.
+- [x] T013 [US1] Write test file `tests/unit/config/schema.test.ts` — test `LLMProviderSchema` accepts valid input and applies defaults (temperature 0.3, max_tokens 1000); test it rejects non-"anthropic" provider, negative max_tokens, temperature > 2; test `InstructionsSchema` XOR constraint (accepts inline-only, accepts file-only, rejects both, rejects neither); test `ClaudeConfigSchema` defaults (permission_mode "manual", web_search false); test `MCPStdioToolSchema` and `MCPHttpToolSchema` discriminated union; test `AgentConfigSchema` with minimal and full fixtures; test strict mode rejects unknown fields; test tool name regex pattern `^[0-9A-Za-z_]+$`. Also test that sub-schemas (`BashConfigSchema`, `FileSystemConfigSchema`, `ExtendedThinkingSchema`, `SubagentsConfigSchema`) are exported and validate correctly with positive and negative cases.
   - File: `tests/unit/config/schema.test.ts`
   - Depends on: T002, T003, T004
   - Blocks: T014
 
-- [ ] T014 [US1] Implement all Zod schemas in `src/config/schema.ts` per data-model.md — `LLMProviderSchema`, `InstructionsSchema`, `MCPStdioToolSchema`, `MCPHttpToolSchema`, `MCPToolSchema` (union), `ToolSchema` (discriminated union), `BashConfigSchema`, `FileSystemConfigSchema`, `ExtendedThinkingSchema`, `SubagentsConfigSchema`, `ClaudeConfigSchema`, `AgentConfigSchema`. Export all schemas and inferred types. Use `z.strictObject()` for unknown field rejection.
+- [x] T014 [US1] Implement all Zod schemas in `src/config/schema.ts` per data-model.md — `LLMProviderSchema`, `InstructionsSchema`, `MCPStdioToolSchema`, `MCPHttpToolSchema`, `MCPToolSchema` (union), `ToolSchema` (discriminated union), `BashConfigSchema`, `FileSystemConfigSchema`, `ExtendedThinkingSchema`, `SubagentsConfigSchema`, `ClaudeConfigSchema`, `AgentConfigSchema`. Export all schemas and inferred types. Use `z.strictObject()` for unknown field rejection.
   - File: `src/config/schema.ts`
   - Depends on: T013
   - Blocks: T016, T018
 
 ### Config Loader (config/loader.ts)
 
-- [ ] T015 [US1] Write test file `tests/unit/config/loader.test.ts` — test `loadAgentConfig()` loads and validates `valid-minimal.yaml`; test it loads `valid-full.yaml`; test it throws `ConfigError` for missing file; test it throws `ConfigError` with formatted Zod error for `invalid-missing.yaml`, `invalid-types.yaml`, `invalid-unknown.yaml`; test `instructions.file` resolution reads the referenced markdown file; test `instructions.file` throws `ConfigError` when referenced file does not exist; test env var substitution in YAML values (set `process.env` in test, use `${VAR}` in fixture)
+- [x] T015 [US1] Write test file `tests/unit/config/loader.test.ts` — test `loadAgentConfig()` loads and validates `valid-minimal.yaml`; test it loads `valid-full.yaml`; test it throws `ConfigError` for missing file; test it throws `ConfigError` with formatted Zod error for `invalid-missing.yaml`, `invalid-types.yaml`, `invalid-unknown.yaml`; test `instructions.file` resolution reads the referenced markdown file; test `instructions.file` throws `ConfigError` when referenced file does not exist; test env var substitution in YAML values (set `process.env` in test, use `${VAR}` in fixture)
   - File: `tests/unit/config/loader.test.ts`
   - Depends on: T002, T003, T004, T005, T008
   - Blocks: T016
 
-- [ ] T016 [US1] Implement `loadAgentConfig(path: string): Promise<AgentConfig>` in `src/config/loader.ts` per modules.md contract — check file exists (`Bun.file().exists()`), read raw text (`Bun.file().text()`), resolve env vars (`resolveEnvVars()`), parse YAML (`parse()` from `yaml`), validate (`AgentConfigSchema.parse()`), verify `instructions.file` exists if set, wrap all errors in `ConfigError` with `{ cause }`. Use LogTape logger for debug logging.
+- [x] T016 [US1] Implement `loadAgentConfig(path: string): Promise<AgentConfig>` in `src/config/loader.ts` per modules.md contract — check file exists (`Bun.file().exists()`), read raw text (`Bun.file().text()`), resolve env vars (`resolveEnvVars()`), parse YAML (`parse()` from `yaml`), validate (`AgentConfigSchema.parse()`), verify `instructions.file` exists if set, wrap all errors in `ConfigError` with `{ cause }`. Use LogTape logger for debug logging.
   - File: `src/config/loader.ts`
   - Depends on: T010, T012, T014, T015
   - Blocks: T018, T020
 
 ### Streaming Types (agent/streaming.ts)
 
-- [ ] T017 [US1] [P] Define the `ChatEvent` union type and `SessionState` type in `src/agent/streaming.ts` per contracts/modules.md — `text`, `tool_start`, `tool_end`, `thinking`, `context_warning`, `compaction`, `error`, `complete`, `status` variants. Export the types. Also export `SessionState` type: `"initializing" | "prompting" | "streaming" | "interrupted" | "shutting_down" | "exited"`. (No test file needed for pure type definitions — they are validated by the compiler.)
+- [x] T017 [US1] [P] Define the `ChatEvent` union type and `SessionState` type in `src/agent/streaming.ts` per contracts/modules.md — `text`, `tool_start`, `tool_end`, `thinking`, `context_warning`, `compaction`, `error`, `complete`, `status` variants. Export the types. Also export `SessionState` type: `"initializing" | "prompting" | "streaming" | "interrupted" | "shutting_down" | "exited"`. (No test file needed for pure type definitions — they are validated by the compiler.)
   - File: `src/agent/streaming.ts`
   - Depends on: T006
   - Blocks: T018, T020
 
 ### CLI Chat Command (cli/commands/chat.ts)
 
-- [ ] T018 [US1] Write test file `tests/unit/cli/chat.test.ts` — test `chatCommand()` returns a Commander `Command` with name "chat"; test it has `--agent` option with default `./agent.yaml`; test it has `--verbose` option defaulting to false; test the action handler calls `loadAgentConfig` with the agent path; test that when config loading fails with `ConfigError`, the command outputs the error message to stderr and exits with code 1; test that when no `--agent` and no `./agent.yaml`, it errors with "No agent configuration found" message
+- [x] T018 [US1] Write test file `tests/unit/cli/chat.test.ts` — test `chatCommand()` returns a Commander `Command` with name "chat"; test it has `--agent` option with default `./agent.yaml`; test it has `--verbose` option defaulting to false; test the action handler calls `loadAgentConfig` with the agent path; test that when config loading fails with `ConfigError`, the command outputs the error message to stderr and exits with code 1; test that when no `--agent` and no `./agent.yaml`, it errors with "No agent configuration found" message
   - File: `tests/unit/cli/chat.test.ts`
   - Depends on: T008, T010, T014, T016, T017
   - Blocks: T019
 
-- [ ] T019 [US1] Implement `chatCommand(): Command` in `src/cli/commands/chat.ts` per contracts/cli.md — define `--agent <path>` (default `./agent.yaml`), `--verbose` flag; async action handler: call `setupLogging()`, call `loadHolodeckEnv()`, call `loadAgentConfig()`, create chat session (stub for now — print welcome and start readline loop), handle `exit`/`quit` input, handle Ctrl+D (readline close), handle Ctrl+C at prompt (show exit hint). Output errors to stderr. Exit code 1 for config errors.
+- [x] T019 [US1] Implement `chatCommand(): Command` in `src/cli/commands/chat.ts` per contracts/cli.md — define `--agent <path>` (default `./agent.yaml`), `--verbose` flag; async action handler: call `setupLogging()`, call `loadHolodeckEnv()`, call `loadAgentConfig()`, create chat session (stub for now — print welcome and start readline loop), handle `exit`/`quit` input, handle Ctrl+D (readline close), handle Ctrl+C at prompt (show exit hint). Output errors to stderr. Exit code 1 for config errors.
   - File: `src/cli/commands/chat.ts`
   - Depends on: T018
   - Blocks: T021
   - Note: Bun implements `node:readline` as a compatibility layer. Using `import * as readline from "node:readline"` is the approved approach per research.md — no Bun-specific alternative is needed.
 
-- [ ] T031 [US1] Write test in `tests/unit/cli/chat.test.ts` — verify prompt format strings match the CLI contract: user input prompt uses `You: ` prefix, agent response display uses `Agent: ` prefix, and the farewell message on exit is exactly `Goodbye!`
+- [x] T031 [US1] Write test in `tests/unit/cli/chat.test.ts` — verify prompt format strings match the CLI contract: user input prompt uses `You: ` prefix, agent response display uses `Agent: ` prefix, and the farewell message on exit is exactly `Goodbye!`
   - File: `tests/unit/cli/chat.test.ts`
   - Depends on: T018, T019
 
-- [ ] T020 [US1] Update `src/cli/index.ts` — replace the placeholder chat command registration with `program.addCommand(chatCommand())` imported from `src/cli/commands/chat.ts`. Remove the inline chat command definition.
+- [x] T020 [US1] Update `src/cli/index.ts` — replace the placeholder chat command registration with `program.addCommand(chatCommand())` imported from `src/cli/commands/chat.ts`. Remove the inline chat command definition.
   - File: `src/cli/index.ts`
   - Depends on: T019
   - Blocks: T021
 
 ### Terminal Markdown Rendering (cli/render.ts)
 
-- [ ] T021 [US1] [P] Write test file `tests/unit/cli/render.test.ts` — test `renderMarkdown()` converts bold/italic to ANSI; test code blocks get syntax highlighting; test `renderStreamingMarkdown()` handles unterminated markdown (e.g., unclosed code fence) via `remend`; test empty string input returns empty string
+- [x] T021 [US1] [P] Write test file `tests/unit/cli/render.test.ts` — test `renderMarkdown()` converts bold/italic to ANSI; test code blocks get syntax highlighting; test `renderStreamingMarkdown()` handles unterminated markdown (e.g., unclosed code fence) via `remend`; test empty string input returns empty string
   - File: `tests/unit/cli/render.test.ts`
   - Depends on: T001
   - Blocks: T022
 
-- [ ] T022 [US1] [P] Implement `renderMarkdown(text: string): string` and `renderStreamingMarkdown(buffer: string): string` in `src/cli/render.ts` — configure `marked` with `marked-terminal` renderer; `renderStreamingMarkdown` applies `remend()` before rendering to auto-close unterminated blocks
+- [x] T022 [US1] [P] Implement `renderMarkdown(text: string): string` and `renderStreamingMarkdown(buffer: string): string` in `src/cli/render.ts` — configure `marked` with `marked-terminal` renderer; `renderStreamingMarkdown` applies `remend()` before rendering to auto-close unterminated blocks
   - File: `src/cli/render.ts`
   - Depends on: T021
   - Blocks: T024
 
 ### Basic Chat Session (agent/session.ts)
 
-- [ ] T023 [US1] Write test file `tests/unit/agent/session.test.ts` — test `createChatSession()` with a valid `AgentConfig` returns a `ChatSession` in `prompting` state; test session resolves inline instructions into `systemPrompt`; test session resolves `instructions.file` by reading the file; test `closeSession()` transitions state to `exited`; test `sendMessage()` returns an AsyncGenerator (mock the SDK `query()` call — do not hit a real API)
+- [x] T023 [US1] Write test file `tests/unit/agent/session.test.ts` — test `createChatSession()` with a valid `AgentConfig` returns a `ChatSession` in `prompting` state; test session resolves inline instructions into `systemPrompt`; test session resolves `instructions.file` by reading the file; test `closeSession()` transitions state to `exited`; test `sendMessage()` returns an AsyncGenerator (mock the SDK `query()` call — do not hit a real API)
   - File: `tests/unit/agent/session.test.ts`
   - Depends on: T014, T017
   - Blocks: T024
 
-- [ ] T024 [US1] Implement `createChatSession(config: AgentConfig): Promise<ChatSession>` and `sendMessage(session: ChatSession, input: string): AsyncGenerator<ChatEvent>` and `closeSession(session: ChatSession): Promise<void>` in `src/agent/session.ts` per contracts/modules.md — resolve instructions (inline or file read), set initial state to `prompting`, build SDK options, invoke `query()` in `sendMessage`, yield `ChatEvent` objects, transition states per state machine in data-model.md
+- [x] T024 [US1] Implement `createChatSession(config: AgentConfig): Promise<ChatSession>` and `sendMessage(session: ChatSession, input: string): AsyncGenerator<ChatEvent>` and `closeSession(session: ChatSession): Promise<void>` in `src/agent/session.ts` per contracts/modules.md — resolve instructions (inline or file read), set initial state to `prompting`, build SDK options, invoke `query()` in `sendMessage`, yield `ChatEvent` objects, transition states per state machine in data-model.md
   - File: `src/agent/session.ts`
   - Depends on: T017, T022, T023, T030
   - Blocks: T025, T027
 
 ### ThinkingConfig Mapping (agent/session.ts)
 
-- [ ] T027 [US1] Write tests in `tests/unit/agent/session.test.ts` — test `mapThinkingConfig()` mapping from YAML `extended_thinking` to SDK `ThinkingConfig`: (1) `extended_thinking` not set → `{ type: "disabled" }`; (2) `{ enabled: false }` → `{ type: "disabled" }`; (3) `{ enabled: true }` → `{ type: "enabled" }`; (4) `{ enabled: true, budget_tokens: 5000 }` → `{ type: "enabled", budgetTokens: 5000 }`
+- [x] T027 [US1] Write tests in `tests/unit/agent/session.test.ts` — test `mapThinkingConfig()` mapping from YAML `extended_thinking` to SDK `ThinkingConfig`: (1) `extended_thinking` not set → `{ type: "disabled" }`; (2) `{ enabled: false }` → `{ type: "disabled" }`; (3) `{ enabled: true }` → `{ type: "enabled" }`; (4) `{ enabled: true, budget_tokens: 5000 }` → `{ type: "enabled", budgetTokens: 5000 }`
   - File: `tests/unit/agent/session.test.ts`
   - Depends on: T014
   - Blocks: T028
 
-- [ ] T028 [US1] Implement `mapThinkingConfig(extendedThinking?: ExtendedThinking): ThinkingConfig` in `src/agent/session.ts` — map YAML `extended_thinking` config to SDK `ThinkingConfig` per the four cases above. Wire into `createChatSession()` SDK options.
+- [x] T028 [US1] Implement `mapThinkingConfig(extendedThinking?: ExtendedThinking): ThinkingConfig` in `src/agent/session.ts` — map YAML `extended_thinking` config to SDK `ThinkingConfig` per the four cases above. Wire into `createChatSession()` SDK options.
   - File: `src/agent/session.ts`
   - Depends on: T024, T027
   - Blocks: T025
 
 ### SDK Message Mapping Scaffold (agent/streaming.ts)
 
-- [ ] T029 [US1] Write tests in `tests/unit/agent/streaming.test.ts` — test `mapSDKMessages()` dispatches on message type: returns `text` ChatEvent for assistant text messages, returns `error` ChatEvent for unknown/unhandled message types. Later stories (US2, US3, US5) add branches for tool_start, tool_end, thinking, etc.
+- [x] T029 [US1] Write tests in `tests/unit/agent/streaming.test.ts` — test `mapSDKMessages()` dispatches on message type: returns `text` ChatEvent for assistant text messages, returns `error` ChatEvent for unknown/unhandled message types. Later stories (US2, US3, US5) add branches for tool_start, tool_end, thinking, etc.
   - File: `tests/unit/agent/streaming.test.ts`
   - Depends on: T017
   - Blocks: T030
 
-- [ ] T030 [US1] Implement `mapSDKMessages(message: SDKMessage): ChatEvent` scaffold in `src/agent/streaming.ts` — core dispatch logic (switch on message type) handling `assistant` text → `text` ChatEvent, with a default branch yielding `error` ChatEvent for unrecognized types. Later stories (US2, US3, US5) add branches for tool use, thinking, and context warnings.
+- [x] T030 [US1] Implement `mapSDKMessages(message: SDKMessage): ChatEvent` scaffold in `src/agent/streaming.ts` — core dispatch logic (switch on message type) handling `assistant` text → `text` ChatEvent, with a default branch yielding `error` ChatEvent for unrecognized types. Later stories (US2, US3, US5) add branches for tool use, thinking, and context warnings.
   - File: `src/agent/streaming.ts`
   - Depends on: T017, T029
   - Blocks: T024
 
 ### Integration: Wire Chat Loop
 
-- [ ] T025 [US1] Wire `chatCommand()` action to use `createChatSession()` and `sendMessage()` — replace the readline stub from T019 with the real session: on user input call `sendMessage()`, iterate the `AsyncGenerator<ChatEvent>`, render `text` events via `renderStreamingMarkdown()`, display `tool_start`/`tool_end` indicators, handle `error` events, display welcome banner with agent name on session start, display "Goodbye!" on exit
+- [x] T025 [US1] Wire `chatCommand()` action to use `createChatSession()` and `sendMessage()` — replace the readline stub from T019 with the real session: on user input call `sendMessage()`, iterate the `AsyncGenerator<ChatEvent>`, render `text` events via `renderStreamingMarkdown()`, display `tool_start`/`tool_end` indicators, handle `error` events, display welcome banner with agent name on session start, display "Goodbye!" on exit
   - File: `src/cli/commands/chat.ts`
   - Depends on: T019, T024, T028
 
-- [ ] T032 [US1] Write test in `tests/unit/cli/chat.test.ts` or `tests/unit/agent/session.test.ts` — verify FR-014 API auth error handling: when the SDK returns an authentication error, the displayed message matches `Error: Authentication failed — invalid or expired credentials.\n  Set ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN.`; verify auth errors are distinguished from other connection failures (e.g., network timeout); verify exit code is 2 for runtime/API errors
+- [x] T032 [US1] Write test in `tests/unit/cli/chat.test.ts` or `tests/unit/agent/session.test.ts` — verify FR-014 API auth error handling: when the SDK returns an authentication error, the displayed message matches `Error: Authentication failed — invalid or expired credentials.\n  Set ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN.`; verify auth errors are distinguished from other connection failures (e.g., network timeout); verify exit code is 2 for runtime/API errors
   - File: `tests/unit/cli/chat.test.ts`
   - Depends on: T024, T025
 
 ### Package Entry Point
 
-- [ ] T026 [US1] [P] Update `src/index.ts` to export public API types: `AgentConfig`, `ChatSession`, `ChatEvent`, `SessionState`, `loadAgentConfig`. Ensure clean barrel exports.
+- [x] T026 [US1] [P] Update `src/index.ts` to export public API types: `AgentConfig`, `ChatSession`, `ChatEvent`, `SessionState`, `loadAgentConfig`. Ensure clean barrel exports.
   - File: `src/index.ts`
   - Depends on: T014, T017, T024
 

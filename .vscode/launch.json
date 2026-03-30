@@ -1,0 +1,19 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Debug: Chat (Sample Agent)",
+			"type": "bun",
+			"request": "launch",
+			"program": "${workspaceFolder}/src/cli/index.ts",
+			"args": [
+				"chat",
+				"--agent",
+				"sample/research-agent/agent.yaml",
+				"-p",
+				"What is quantum computing?"
+			],
+			"stopOnEntry": true
+		}
+	]
+}
