@@ -1,19 +1,13 @@
-import * as readline from "node:readline";
 import { Command } from "commander";
 import type { ChatSession } from "../../agent/session.js";
-import {
-	closeSession,
-	createChatSession,
-	interruptResponse,
-	sendMessage,
-} from "../../agent/session.js";
-import type { ChatEvent } from "../../agent/streaming.js";
+import { closeSession, createChatSession, sendMessage } from "../../agent/session.js";
 import { loadAgentConfig } from "../../config/loader.js";
 import type { AgentConfig } from "../../config/schema.js";
 import { loadHolodeckEnv } from "../../lib/env.js";
 import { ConfigError, toErrorMessage } from "../../lib/errors.js";
 import { setupLogging } from "../../lib/logger.js";
 import { renderStreamingMarkdown } from "../render.js";
+import { launchTUI } from "../tui/app.js";
 
 interface ChatCommandOptions {
 	agent?: string;
@@ -60,105 +54,26 @@ function isMissingFileError(error: ConfigError): boolean {
 	return error.message.toLowerCase().includes("not found");
 }
 
-interface RenderState {
-	responseStarted: boolean;
-	streamingBuffer: string;
-	renderedBuffer: string;
-	suppressPrefix: boolean;
-}
-
-function flushResponseLine(state: RenderState): void {
-	if (state.responseStarted) {
-		writeStdout("\n");
-		state.responseStarted = false;
-	}
-}
-
-function renderChatEvent(
-	event: ChatEvent,
-	state: RenderState,
-): { shouldAbort: boolean; runtimeErrorMessage?: string } {
-	if (event.type === "text") {
-		if (!state.responseStarted) {
-			if (!state.suppressPrefix) {
-				writeStdout(AGENT_RESPONSE_PREFIX);
-			}
-			state.responseStarted = true;
-		}
-
-		state.streamingBuffer += event.content;
-		const rendered = renderStreamingMarkdown(state.streamingBuffer);
-		const delta = rendered.slice(state.renderedBuffer.length);
-		if (delta.length > 0) {
-			writeStdout(delta);
-		}
-
-		state.renderedBuffer = rendered;
-		return { shouldAbort: false };
-	}
-
-	if (event.type === "tool_start") {
-		flushResponseLine(state);
-		writeStdout(`Calling ${event.toolName}...\n`);
-		return { shouldAbort: false };
-	}
-
-	if (event.type === "tool_end") {
-		flushResponseLine(state);
-		if (event.status === "done") {
-			writeStdout(`${event.toolName} done\n`);
-			return { shouldAbort: false };
-		}
-
-		writeStdout(`${event.toolName} failed${event.error ? `: ${event.error}` : ""}\n`);
-		return { shouldAbort: false };
-	}
-
-	if (event.type === "thinking") {
-		return { shouldAbort: false };
-	}
-
-	if (event.type === "context_warning") {
-		writeStderr(`Warning: Context window is ${Math.round(event.ratio * 100)}% full.\n`);
-		return { shouldAbort: false };
-	}
-
-	if (event.type === "compaction") {
-		writeStderr(`Note: ${event.summary}\n`);
-		return { shouldAbort: false };
-	}
-
-	if (event.type === "status") {
-		writeStderr(`${event.message}\n`);
-		return { shouldAbort: false };
-	}
-
-	if (event.type === "complete") {
-		flushResponseLine(state);
-		return { shouldAbort: false };
-	}
-
-	if (event.type === "error") {
-		flushResponseLine(state);
-		return { shouldAbort: true, runtimeErrorMessage: event.message };
-	}
-
-	return { shouldAbort: false };
-}
-
 async function runSingleMessage(session: ChatSession, message: string): Promise<void> {
-	const renderState: RenderState = {
-		responseStarted: false,
-		streamingBuffer: "",
-		renderedBuffer: "",
-		suppressPrefix: true,
-	};
+	let responseStarted = false;
+	let streamingBuffer = "";
+	let renderedBuffer = "";
 
 	try {
 		for await (const event of sendMessage(session, message)) {
-			const rendered = renderChatEvent(event, renderState);
-			if (rendered.shouldAbort) {
-				writeStderr(formatRuntimeErrorMessage(rendered.runtimeErrorMessage ?? "Runtime error"));
+			if (event.type === "text") {
+				if (!responseStarted) {
+					responseStarted = true;
+				}
+				streamingBuffer += event.content;
+				const rendered = renderStreamingMarkdown(streamingBuffer);
+				const delta = rendered.slice(renderedBuffer.length);
+				if (delta.length > 0) {
+					writeStdout(delta);
+				}
+				renderedBuffer = rendered;
+			} else if (event.type === "error") {
+				writeStderr(formatRuntimeErrorMessage(event.message));
 				process.exitCode = 2;
 				return;
 			}
@@ -168,7 +83,7 @@ async function runSingleMessage(session: ChatSession, message: string): Promise<
 		process.exitCode = 2;
 		return;
 	} finally {
-		if (renderState.responseStarted) {
+		if (responseStarted) {
 			writeStdout("\n");
 		}
 		await closeSession(session);
@@ -219,106 +134,12 @@ export async function runChatCommand(options: ChatCommandOptions): Promise<void>
 		return;
 	}
 
-	writeStdout(`Starting chat with ${config.name}\n`);
-
-	const rl = readline.createInterface({
-		input: process.stdin,
-		output: process.stdout,
-		prompt: USER_PROMPT_PREFIX,
-	});
-
-	let closing = false;
-	let streaming = false;
-
-	const shutdown = async (): Promise<void> => {
-		if (closing) {
-			return;
-		}
-
-		closing = true;
-		try {
-			rl.close();
-		} catch {
-			// no-op: readline may already be closing/closed
-		}
-		await closeSession(session);
-		writeStdout(`${FAREWELL_MESSAGE}\n`);
-		process.exit(process.exitCode ?? 0);
-	};
-
-	const runtimeFailure = async (message: string): Promise<void> => {
-		writeStderr(formatRuntimeErrorMessage(message));
+	try {
+		await launchTUI(session, config);
+	} catch (error) {
+		writeStderr(formatRuntimeErrorMessage(toErrorMessage(error)));
 		process.exitCode = 2;
-		await shutdown();
-	};
-
-	rl.on("SIGINT", async () => {
-		if (streaming) {
-			await interruptResponse(session);
-			writeStdout("\n");
-			rl.prompt();
-			return;
-		}
-
-		writeStderr("Type 'exit' or 'quit' to leave.\n");
-		rl.prompt();
-	});
-
-	rl.on("close", async () => {
-		await shutdown();
-	});
-
-	rl.on("line", async (rawLine) => {
-		if (closing) {
-			return;
-		}
-
-		const trimmed = rawLine.trim();
-		if (trimmed.length === 0) {
-			rl.prompt();
-			return;
-		}
-
-		if (trimmed === "exit" || trimmed === "quit") {
-			await shutdown();
-			return;
-		}
-
-		streaming = true;
-		rl.pause();
-
-		const renderState: RenderState = {
-			responseStarted: false,
-			streamingBuffer: "",
-			renderedBuffer: "",
-			suppressPrefix: false,
-		};
-
-		try {
-			for await (const event of sendMessage(session, rawLine)) {
-				const rendered = renderChatEvent(event, renderState);
-				if (rendered.shouldAbort) {
-					await runtimeFailure(rendered.runtimeErrorMessage ?? "Runtime error");
-					return;
-				}
-			}
-		} catch (error) {
-			await runtimeFailure(toErrorMessage(error));
-			return;
-		} finally {
-			streaming = false;
-			rl.resume();
-		}
-
-		if (!closing) {
-			rl.prompt();
-		}
-	});
-
-	rl.prompt();
-	await new Promise<void>((resolve) => {
-		rl.once("close", () => resolve());
-	});
+	}
 }
 
 export function chatCommand(): Command {

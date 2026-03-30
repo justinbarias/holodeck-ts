@@ -1,0 +1,8 @@
+name: e2e-test-agent
+model:
+  provider: anthropic
+  name: claude-sonnet-4-20250514
+  max_tokens: 100
+  temperature: 0
+instructions:
+  inline: "You are a test agent. Always respond with exactly: HOLODECK_E2E_OK"
