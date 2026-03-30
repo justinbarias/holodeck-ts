@@ -330,6 +330,12 @@ export async function loadAgent(path: string) {
 
 ### Claude Agent SDK Integration
 
+> **Reference implementations:** Before writing new SDK integration code, consult:
+> 1. `/tmp/claude-agent-sdk-demos` — Official demo projects (cloned from [github.com/anthropics/claude-agent-sdk-demos](https://github.com/anthropics/claude-agent-sdk-demos)). Key demos: `email-agent/ccsdk/session.ts` (multi-turn with `resume`), `simple-chatapp/server/session.ts` (message handling), `hello-world/hello-world.ts` (hooks, options).
+> 2. The `claude-agent-sdk-skill` slash command — use `/claude-agent-sdk-skill` for up-to-date SDK patterns including `query()`, hooks, MCP servers, custom tools, and permissions.
+>
+> Always prefer patterns from these references over inventing new SDK integration approaches.
+
 ```typescript
 import { query } from "@anthropic-ai/claude-agent-sdk";
 
@@ -774,6 +780,7 @@ Follow OpenTelemetry [GenAI semantic conventions](https://opentelemetry.io/docs/
 
 ## Additional Resources
 
+- [Claude Agent SDK Demos](https://github.com/anthropics/claude-agent-sdk-demos) — Official reference implementations (local clone: `/tmp/claude-agent-sdk-demos`)
 - [Claude Agent SDK Overview](https://platform.claude.com/docs/en/agent-sdk/overview)
 - [Claude Agent SDK TypeScript Reference](https://platform.claude.com/docs/en/agent-sdk/typescript)
 - [Anthropic Contextual Retrieval](https://www.anthropic.com/engineering/contextual-retrieval)
