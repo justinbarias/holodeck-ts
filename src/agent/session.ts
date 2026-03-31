@@ -12,6 +12,7 @@ import { ConfigError, toErrorMessage } from "../lib/errors.js";
 import { getModuleLogger } from "../lib/logger.js";
 import { buildMCPServers } from "../tools/mcp.js";
 import { discoverSkills, type Skill } from "../tools/skills.js";
+import { buildHooks } from "./hooks.js";
 import type { ChatEvent, SessionState } from "./streaming.js";
 import { mapSDKMessages, type StreamContext } from "./streaming.js";
 
@@ -37,6 +38,8 @@ export interface ChatSession {
 	contextUsage: SDKControlGetContextUsageResponse | null;
 	skills: Skill[];
 	contextWarningShown: boolean;
+	onCompactionStart?: () => void;
+	onCompactionEnd?: () => void;
 }
 
 function mapPermissionMode(
@@ -67,6 +70,8 @@ function buildQueryOptions(session: ChatSession): Options {
 		mcpServers: session.mcpServers,
 		includePartialMessages: true,
 		thinking: mapThinkingConfig(claude?.extended_thinking),
+		hooks: buildHooks(session),
+		settingSources: [],
 	};
 }
 

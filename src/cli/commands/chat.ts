@@ -72,6 +72,14 @@ async function runSingleMessage(session: ChatSession, message: string): Promise<
 					writeStdout(delta);
 				}
 				renderedBuffer = rendered;
+			} else if (event.type === "context_warning") {
+				writeStderr(
+					`Warning: Context usage at ${Math.round(event.ratio * 100)}% -- older messages may be summarized soon.\n`,
+				);
+			} else if (event.type === "compaction") {
+				writeStderr(
+					"Info: Conversation compacted -- older messages have been summarized to free context space.\n",
+				);
 			} else if (event.type === "error") {
 				writeStderr(formatRuntimeErrorMessage(event.message));
 				process.exitCode = 2;

@@ -43,10 +43,15 @@ export function createStatusBar(renderer: RenderContext, store: ChatStore): Stat
 		tool: ToolStatus | null,
 		statusMsg: string | null,
 		contextPct: number,
+		isCompacting: boolean,
 	): void {
 		const parts: string[] = [];
 
-		if (tool) {
+		if (isCompacting) {
+			const frame = SPINNER_FRAMES[spinnerIndex % SPINNER_FRAMES.length];
+			parts.push(`${frame} Compacting conversation...`);
+			bar.fg = WARNING_YELLOW;
+		} else if (tool) {
 			const frame = SPINNER_FRAMES[spinnerIndex % SPINNER_FRAMES.length];
 			const elapsed = formatElapsed(tool.startedAt);
 			parts.push(`${frame} Running: ${tool.toolName}  ${elapsed}`);
@@ -77,17 +82,16 @@ export function createStatusBar(renderer: RenderContext, store: ChatStore): Stat
 
 	function onStateChange(): void {
 		const s = store.getState();
-		buildContent(s.currentToolStatus, s.statusMessage, s.contextPercentage);
+		buildContent(s.currentToolStatus, s.statusMessage, s.contextPercentage, s.isCompacting);
 
-		if (s.currentToolStatus && !animationTimer) {
+		const needsAnimation = s.currentToolStatus !== null || s.isCompacting;
+		if (needsAnimation && !animationTimer) {
 			animationTimer = setInterval(() => {
 				spinnerIndex++;
 				const s2 = store.getState();
-				if (s2.currentToolStatus) {
-					buildContent(s2.currentToolStatus, s2.statusMessage, s2.contextPercentage);
-				}
+				buildContent(s2.currentToolStatus, s2.statusMessage, s2.contextPercentage, s2.isCompacting);
 			}, 80);
-		} else if (!s.currentToolStatus && animationTimer) {
+		} else if (!needsAnimation && animationTimer) {
 			clearInterval(animationTimer);
 			animationTimer = null;
 		}

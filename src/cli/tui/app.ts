@@ -30,6 +30,10 @@ export async function launchTUI(session: ChatSession, config: AgentConfig): Prom
 		skills: session.skills.map((s) => s.name),
 	});
 
+	// Wire compaction callbacks from hooks to store
+	session.onCompactionStart = () => store.startCompaction();
+	session.onCompactionEnd = () => store.endCompaction();
+
 	// Create components
 	const sidebar = createSidebar(renderer, store);
 	const chatHistory = createChatHistory(renderer, store);
@@ -71,6 +75,18 @@ export async function launchTUI(session: ChatSession, config: AgentConfig): Prom
 
 	// Focus the input
 	inputBar.textarea.focus();
+
+	// Disable input during compaction
+	store.subscribe(() => {
+		const s = store.getState();
+		if (s.isCompacting) {
+			inputBar.textarea.focusable = false;
+			inputBar.textarea.blur();
+		} else if (!s.isStreaming) {
+			inputBar.textarea.focusable = true;
+			inputBar.textarea.focus();
+		}
+	});
 
 	// Global keybindings
 	let lastSigintTime = 0;

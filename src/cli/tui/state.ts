@@ -29,6 +29,7 @@ export interface TUIState {
 	contextPercentage: number;
 	sessionTokens: { input: number; output: number } | null;
 	statusMessage: string | null;
+	isCompacting: boolean;
 	isStreaming: boolean;
 	agentName: string;
 	modelName: string;
@@ -66,6 +67,7 @@ export class ChatStore {
 			contextPercentage: 0,
 			sessionTokens: null,
 			statusMessage: null,
+			isCompacting: false,
 			isStreaming: false,
 			agentName: init.agentName,
 			modelName: init.modelName,
@@ -176,6 +178,18 @@ export class ChatStore {
 
 	setStatusMessage(message: string | null): void {
 		this.state.statusMessage = message;
+		this.notify();
+	}
+
+	startCompaction(): void {
+		this.state.isCompacting = true;
+		this.state.statusMessage = "Compacting conversation...";
+		this.notify();
+	}
+
+	endCompaction(): void {
+		this.state.isCompacting = false;
+		this.state.statusMessage = null;
 		this.notify();
 	}
 

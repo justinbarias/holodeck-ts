@@ -25,6 +25,7 @@ describe("tui/state ChatStore", () => {
 		expect(s.contextPercentage).toBe(0);
 		expect(s.sessionTokens).toBeNull();
 		expect(s.statusMessage).toBeNull();
+		expect(s.isCompacting).toBe(false);
 		expect(s.isStreaming).toBe(false);
 		expect(s.agentName).toBe("test-agent");
 		expect(s.modelName).toBe("claude-sonnet-4-20250514");
@@ -155,6 +156,25 @@ describe("tui/state ChatStore", () => {
 
 		store.startAgentMessage();
 		expect(listener).toHaveBeenCalledTimes(2);
+	});
+
+	it("startCompaction sets isCompacting and status message", () => {
+		const store = createStore();
+		store.startCompaction();
+		const s = store.getState();
+
+		expect(s.isCompacting).toBe(true);
+		expect(s.statusMessage).toBe("Compacting conversation...");
+	});
+
+	it("endCompaction clears isCompacting and status message", () => {
+		const store = createStore();
+		store.startCompaction();
+		store.endCompaction();
+		const s = store.getState();
+
+		expect(s.isCompacting).toBe(false);
+		expect(s.statusMessage).toBeNull();
 	});
 
 	it("unsubscribe stops notifications", () => {
