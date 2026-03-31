@@ -10,7 +10,7 @@ import type { AgentConfig, ExtendedThinking } from "../config/schema.js";
 import { ConfigError, toErrorMessage } from "../lib/errors.js";
 import { getModuleLogger } from "../lib/logger.js";
 import { buildMCPServers } from "../tools/mcp.js";
-import { discoverSkills, type Skill } from "../tools/skills.js";
+import type { Skill } from "../tools/skills.js";
 import { buildHooks } from "./hooks.js";
 import { createPermissionHandler, type PromptFn } from "./permissions.js";
 import type { ChatEvent, SessionState } from "./streaming.js";
@@ -100,13 +100,10 @@ export function mapThinkingConfig(extendedThinking?: ExtendedThinking): Thinking
 
 export async function createChatSession(config: AgentConfig): Promise<ChatSession> {
 	const systemPrompt = await resolveSystemPrompt(config);
-	const skillsBasePath = config.claude?.working_directory ?? process.cwd();
-	const skills = await discoverSkills(skillsBasePath);
 	const mcpServers = buildMCPServers(config.tools);
 
-	sessionLogger.info("Chat session created for agent {name} with {skillCount} skills.", {
+	sessionLogger.info("Chat session created for agent {name}.", {
 		name: config.name,
-		skillCount: skills.length,
 	});
 
 	return {
@@ -118,9 +115,30 @@ export async function createChatSession(config: AgentConfig): Promise<ChatSessio
 		query: null,
 		lastToolInvocation: null,
 		contextUsage: null,
-		skills,
+		skills: [],
 		contextWarningShown: false,
 	};
+}
+
+export async function populateSkills(session: ChatSession): Promise<void> {
+	if (session.skills.length > 0 || !session.query) {
+		return;
+	}
+
+	try {
+		const commands = await session.query.supportedCommands();
+		session.skills = commands.map((cmd) => ({
+			name: cmd.name,
+			description: cmd.description,
+		}));
+		sessionLogger.info("Discovered {count} skills via SDK.", {
+			count: session.skills.length,
+		});
+	} catch (error) {
+		sessionLogger.debug("Failed to fetch supported commands: {error}", {
+			error: toErrorMessage(error),
+		});
+	}
 }
 
 function updateLastToolInvocation(session: ChatSession, event: ChatEvent): void {
@@ -186,6 +204,9 @@ export async function* sendMessage(session: ChatSession, input: string): AsyncGe
 		options,
 	});
 	session.query = activeQuery;
+
+	// Populate skills from SDK on first query
+	await populateSkills(session);
 
 	const ctx: StreamContext = {
 		onSessionId: (id) => {
