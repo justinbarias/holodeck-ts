@@ -1,3 +1,4 @@
+import { ConfigError } from "./errors.js";
 import { getModuleLogger } from "./logger.js";
 
 const ENV_VAR_PATTERN = /\$\{(\w+)\}/g;
@@ -32,16 +33,25 @@ function parseEnvLine(line: string): [key: string, value: string] | null {
 }
 
 export function resolveEnvVars(input: string): string {
+	const missing: string[] = [];
+
+	for (const match of input.matchAll(ENV_VAR_PATTERN)) {
+		const name = match[1] as string;
+		if (process.env[name] === undefined) {
+			missing.push(name);
+		}
+	}
+
+	if (missing.length > 0) {
+		throw new ConfigError(`Missing environment variables: ${missing.join(", ")}`);
+	}
+
 	return input.replace(ENV_VAR_PATTERN, (_match, name: string) => {
-		const resolvedValue = process.env[name];
-		if (resolvedValue === undefined) {
-			envLogger.warn("Environment variable {name} is not set; substituting empty string.", {
-				name,
-			});
+		const value = process.env[name];
+		if (value === undefined) {
 			return "";
 		}
-
-		return resolvedValue;
+		return value;
 	});
 }
 
