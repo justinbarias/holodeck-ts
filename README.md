@@ -305,7 +305,51 @@ Define tools programmatically using the Claude Agent SDK's `tool()` function wit
 
 ### Skills
 
-Reusable agent capabilities defined as `SKILL.md` files, automatically discovered and invoked by Claude when relevant.
+Reusable agent capabilities defined as `SKILL.md` files. Skills are automatically discovered from `.claude/skills/*/SKILL.md` in the project directory and injected into the agent's system prompt by the Claude Agent SDK.
+
+**Creating a skill:**
+
+```
+your-project/
+  .claude/
+    skills/
+      deploy/
+        SKILL.md
+      research/
+        SKILL.md
+```
+
+Each `SKILL.md` supports optional YAML frontmatter:
+
+~~~markdown
+---
+name: deploy
+description: Automated deployment pipeline with zero-downtime rolling updates
+---
+
+# Deploy Skill
+
+Run the deploy pipeline for any environment.
+
+## Usage
+
+The agent will invoke this skill when deployment tasks are requested.
+~~~
+
+- `name` — skill identifier (defaults to directory name if omitted)
+- `description` — shown in skill listings; helps the agent decide when to invoke the skill
+- The markdown body becomes the skill's instructions, injected into the system prompt
+
+**Configuration:**
+
+Skills are loaded when `setting_sources` includes `"project"` (the default):
+
+```yaml
+claude:
+  setting_sources: ["project"]  # default — enables skill auto-discovery
+```
+
+Set `setting_sources: []` to disable skill loading. The built-in `Skill` tool must be available (included in `allowed_tools` or `allowed_tools: null`).
 
 ### Native Claude Code Tools
 

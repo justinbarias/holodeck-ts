@@ -578,6 +578,7 @@ Transcript-based grading follows Anthropic's recommendation to evaluate agent be
 | `file_system` | object | No | — | `{ read, write, edit }` (all boolean) |
 | `subagents` | object | No | — | `{ enabled, max_parallel: 1-16 }` |
 | `allowed_tools` | string[] | No | null | Explicit tool allowlist (null = all) |
+| `setting_sources` | string[] | No | `["project"]` | SDK setting sources: `user`, `project`, `local`. Controls SKILL.md and CLAUDE.md loading |
 
 ### ObservabilityConfig
 
@@ -646,7 +647,9 @@ Tool design follows [Anthropic's principles](https://www.anthropic.com/engineeri
 
 ### Skills
 
-SKILL.md files in `.claude/skills/*/SKILL.md` are auto-discovered when `settingSources: ["user", "project"]` is configured. Claude invokes them when the task matches the skill description.
+SKILL.md files in `.claude/skills/*/SKILL.md` are auto-discovered by the Claude Agent SDK when `setting_sources` includes `"project"` (the default). The SDK handles frontmatter parsing, system prompt injection, and provides a built-in `Skill` tool for invocation. Configure via `claude.setting_sources` in `agent.yaml`.
+
+Skill metadata (name, description) is available at runtime via `query.supportedCommands()` and displayed in the TUI sidebar.
 
 ## Evaluation Framework
 
