@@ -1,92 +1,97 @@
 # Tasks: User Story 7 - Skills Auto-Discovery and Invocation
 
-**Feature Branch**: `001-holodeck-chat` | **Date**: 2026-03-29
+**Feature Branch**: `001-holodeck-chat` | **Date**: 2026-03-29 (updated 2026-03-31)
 **User Story**: US7 - Skills Auto-Discovery and Invocation (P3)
 **FRs**: FR-009 (skill auto-discovery)
 **Prerequisite**: All Setup, Foundational, and US1-US6 tasks are complete.
 
 > **Note**: Task IDs are scoped to this file. Cross-file references use the format `tasks-usX.md#TXXX`.
 
-## Assumptions from Prior Completion
+## Implementation Approach: SDK-Native Skills
 
-The following are already implemented and available:
-
-- `src/config/schema.ts` — All Zod schemas (`AgentConfigSchema`, `ClaudeConfigSchema`, etc.)
-- `src/config/loader.ts` — `loadAgentConfig()` with YAML parsing and env var resolution
-- `src/lib/errors.ts` — `HoloDeckError`, `ConfigError`, `ToolError` hierarchy
-- `src/lib/logger.ts` — LogTape structured logging (`getModuleLogger()`, stderr only)
-- `src/lib/env.ts` — Environment variable resolution
-- `src/cli/index.ts` — Commander entry point
-- `src/cli/commands/chat.ts` — Chat command with interactive loop, signal handling, rendering
-- `src/cli/render.ts` — Terminal markdown rendering (marked + marked-terminal + remend)
-- `src/agent/session.ts` — `ChatSession` with `createChatSession()`, `sendMessage()`, multi-turn, context monitoring, compaction
-- `src/agent/streaming.ts` — `ChatEvent` union type, `mapSDKMessages()` AsyncGenerator
-- `src/agent/hooks.ts` — `buildHooks()` with PreToolUse, PostToolUse, PreCompact, PostCompact
-- `src/agent/permissions.ts` — `canUseTool` callback for manual permission mode
-- `src/tools/mcp.ts` — MCP tool config mapping
-- Test fixtures in `tests/fixtures/`
-
-## Independent Test
-
-Create a `.claude/skills/greet/SKILL.md` file in a test project directory, start a chat session pointing at that directory, and verify the agent's system prompt includes the skill instructions. Also verify that starting a session in a directory with no `.claude/skills/` directory completes without errors.
+> **Key Decision (2026-03-31):** The Claude Agent SDK natively supports skill auto-discovery
+> via `settingSources: ['project']`. This eliminates the need for custom `discoverSkills()`,
+> frontmatter parsing (`gray-matter`), and system prompt injection code. The SDK handles
+> SKILL.md globbing, frontmatter parsing, prompt injection, and provides a built-in `Skill`
+> tool for invocation. Skill metadata is available via `query.supportedCommands()`.
 
 ---
 
 ## Phase 7: Skills Auto-Discovery and Invocation
 
-**Goal**: Auto-discover SKILL.md files from `.claude/skills/*/SKILL.md` at session startup, parse them into `Skill` objects, append skill information to the agent's system prompt, and handle edge cases (missing directory, invalid files) gracefully.
+**Goal**: Enable SDK-native skill discovery via `setting_sources` config, expose skill metadata to the TUI sidebar, and handle edge cases gracefully.
 
 ### 7A. Test Fixtures
 
-- [ ] T105 [US7] Create valid skill fixture with frontmatter (name, description) and body content — `tests/fixtures/skills/.claude/skills/greet/SKILL.md`
-- [ ] T106 [US7] Create invalid skill fixture with empty content (0 bytes) — `tests/fixtures/skills/.claude/skills/invalid/SKILL.md`
-- [ ] T107 [US7] Create valid skill fixture without frontmatter (description inferred from first paragraph) — `tests/fixtures/skills/.claude/skills/summarize/SKILL.md`
+- [x] T105 [US7] Create valid skill fixture with frontmatter — `tests/fixtures/skills/project/.claude/skills/deploy/SKILL.md`
+- [x] T106 [US7] Create invalid skill fixture with empty content (0 bytes) — `tests/fixtures/skills/empty-project/.claude/skills/broken/SKILL.md`
+- [x] T107 [US7] Create valid skill fixture without frontmatter — `tests/fixtures/skills/project/.claude/skills/greeter/SKILL.md`
 
-### 7B. Skill Discovery (`discoverSkills`) — Tests First
+### 7B. Skill Discovery — N/A (SDK-Native)
 
-- [ ] T108 [US7] Write test: `discoverSkills` returns array of `Skill` objects for valid SKILL.md files in `.claude/skills/*/` — `tests/unit/tools/skills.test.ts`
-- [ ] T109 [US7] Write test: `discoverSkills` extracts `name` from directory name (not file content) — `tests/unit/tools/skills.test.ts`
-- [ ] T110 [US7] Write test: `discoverSkills` extracts `description` from frontmatter `description` field when present — `tests/unit/tools/skills.test.ts`
-- [ ] T111 [US7] Write test: `discoverSkills` falls back to first paragraph as `description` when no frontmatter — `tests/unit/tools/skills.test.ts`
-- [ ] T112 [US7] Write test: `discoverSkills` sets `instructions` to full SKILL.md content (excluding frontmatter) — `tests/unit/tools/skills.test.ts`
-- [ ] T113 [US7] Write test: `discoverSkills` sets `path` to absolute path of the SKILL.md file — `tests/unit/tools/skills.test.ts`
-- [ ] T114 [US7] Write test: `discoverSkills` returns empty array when `.claude/skills/` directory does not exist — `tests/unit/tools/skills.test.ts`
-- [ ] T115 [US7] Write test: `discoverSkills` returns empty array when `.claude/` directory does not exist — `tests/unit/tools/skills.test.ts`
-- [ ] T116 [US7] Write test: `discoverSkills` skips empty SKILL.md files and logs a warning — `tests/unit/tools/skills.test.ts`
-- [ ] T117 [US7] Write test: `discoverSkills` skips unreadable SKILL.md files (permission denied) and logs a warning — `tests/unit/tools/skills.test.ts`
-- [ ] T118 [US7] Write test: `discoverSkills` returns valid skills even when some files are invalid (partial failure) — `tests/unit/tools/skills.test.ts`
+> Tasks T108-T118 originally planned custom `discoverSkills()` tests. The SDK now handles
+> discovery natively. These tasks are replaced by a minimal `Skill` interface test.
 
-### 7C. Skill Discovery — Implementation
+- ~~T108-T116, T118~~ [US7] **REPLACED** — SDK handles discovery natively. Custom `discoverSkills()` removed.
+- [x] T108-alt [US7] Write test: `Skill` interface accepts valid objects — `tests/unit/tools/skills.test.ts`
 
-- [ ] T119 [US7] Define `Skill` interface with `name`, `description`, `instructions`, `path` fields — `src/tools/skills.ts`
-- [ ] T120 [US7] Implement `discoverSkills(basePath: string): Promise<Skill[]>` — glob for `{basePath}/.claude/skills/*/SKILL.md` using `Bun.Glob` — `src/tools/skills.ts`
-- [ ] T121 [US7] Implement frontmatter parsing: extract `name`/`description` from YAML frontmatter delimited by `---` markers — `src/tools/skills.ts`
-- [ ] T122 [US7] Implement fallback logic: use directory name for `name`, first non-empty paragraph for `description` when no frontmatter — `src/tools/skills.ts`
-- [ ] T123 [US7] Handle empty files: log warning via LogTape `["holodeck", "tools"]` logger and skip — `src/tools/skills.ts`
-- [ ] T124 [US7] Handle read errors (permissions, I/O): catch, log warning, continue with remaining files — `src/tools/skills.ts`
+### 7C. Skill Discovery — Implementation (SDK-Native)
 
-### 7D. Session Integration — Tests First
+> Tasks T119-T124 originally planned custom discovery code. Replaced by SDK config.
 
-- [ ] T125 [US7] Write test: `createChatSession` calls `discoverSkills` with `claude.working_directory` from config when set — `tests/unit/agent/session.test.ts`
-- [ ] T126 [US7] Write test: `createChatSession` calls `discoverSkills` with `process.cwd()` when `claude.working_directory` is not set — `tests/unit/agent/session.test.ts`
-- [ ] T127 [US7] Write test: `createChatSession` stores discovered skills in `session.skills` — `tests/unit/agent/session.test.ts`
-- [ ] T128 [US7] Write test: discovered skills are appended to system prompt passed to SDK `query()` — `tests/unit/agent/session.test.ts`
-- [ ] T129 [US7] Write test: system prompt skill section includes skill name, description, and instructions for each skill — `tests/unit/agent/session.test.ts`
-- [ ] T130 [US7] Write test: session creates successfully with empty skills array (no `.claude/skills/` directory) — `tests/unit/agent/session.test.ts`
+- ~~T119~~ [US7] **REPLACED** — `Skill` interface simplified to `{ name, description }` (no `instructions`/`path`) — `src/tools/skills.ts`
+- ~~T120~~ [US7] **REPLACED** — Custom `discoverSkills()` removed. SDK discovers via `settingSources: ['project']`
+- ~~T121~~ [US7] **N/A** — Frontmatter parsing handled by SDK natively. No `gray-matter` dependency needed.
+- ~~T122~~ [US7] **N/A** — Fallback logic handled by SDK natively.
+- ~~T123~~ [US7] **N/A** — Empty file handling handled by SDK natively.
+- ~~T124~~ [US7] **N/A** — Read error handling handled by SDK natively.
+
+**New tasks:**
+- [x] T140 [US7] Add `setting_sources` field to `ClaudeConfigSchema` — `z.array(z.enum(["user", "project", "local"])).default(["project"])` — `src/config/schema.ts`
+- [x] T141 [US7] Map `claude.setting_sources` to SDK `settingSources` in `buildQueryOptions()` — `src/agent/session.ts`
+
+### 7D. Session Integration — Tests
+
+- ~~T125~~ [US7] **N/A** — SDK handles `working_directory` internally via `cwd` option
+- ~~T126~~ [US7] **N/A** — SDK handles cwd fallback internally
+- ~~T127~~ [US7] **REPLACED** — Skills now populated lazily via `populateSkills()`, not at session creation
+- ~~T128~~ [US7] **N/A** — SDK injects skills into system prompt internally
+- ~~T129~~ [US7] **N/A** — SDK formats skill prompt section internally
+- [x] T130 [US7] Write test: session creates successfully with empty skills array — `tests/unit/agent/session.test.ts`
+
+**New tests:**
+- [x] T142 [US7] Write test: session initializes with empty skills array (lazily populated) — `tests/unit/agent/session.test.ts`
+- [x] T143 [US7] Write tests: `setting_sources` schema validation (5 tests) — `tests/unit/config/schema.test.ts`
 
 ### 7E. Session Integration — Implementation
 
-- [ ] T131 [US7] In `createChatSession()`, call `discoverSkills()` with resolved working directory during initialization — `src/agent/session.ts`
-- [ ] T132 [US7] Store discovered skills array in `session.skills` field — `src/agent/session.ts`
-- [ ] T133 [US7] Build skill prompt section: format each skill as a block with name, description, and full instructions — `src/agent/session.ts`
-- [ ] T134 [US7] Append skill prompt section to system prompt before passing to SDK `query()` — `src/agent/session.ts`
-- [ ] T135 [US7] Log discovered skill count and names at `info` level during session creation — `src/agent/session.ts`
+- ~~T131~~ [US7] **REPLACED** — `discoverSkills()` call removed; skills start empty, populated lazily
+- ~~T132~~ [US7] **REPLACED** — Skills populated via `populateSkills()` using `query.supportedCommands()`
+- ~~T133~~ [US7] **N/A** — SDK builds skill prompt section internally
+- [x] T134 [US7] Map `setting_sources` config to SDK `settingSources` option — `src/agent/session.ts`
+- ~~T135~~ [US7] **REPLACED** — Logging moved to `populateSkills()` (logs skill count after first query)
 
-### 7F. Verification
+**New tasks:**
+- [x] T144 [US7] Add `populateSkills()` function using `query.supportedCommands()` — `src/agent/session.ts`
+- [x] T145 [US7] Call `populateSkills()` in `sendMessage()` after query creation — `src/agent/session.ts`
 
-- [ ] T136 [US7] Run all skill discovery tests (`bun test tests/unit/tools/skills.test.ts`) and verify pass — `tests/unit/tools/skills.test.ts`
-- [ ] T137 [US7] Run all session integration tests (`bun test tests/unit/agent/session.test.ts`) and verify pass — `tests/unit/agent/session.test.ts`
-- [ ] T138 [US7] Run full test suite (`bun test`) and verify no regressions — all test files
+### 7F. TUI Integration
+
+- [x] T139 [US7] TUI sidebar already displays skill names from `session.skills` — verified existing
+- [x] T146 [US7] Add `updateSkills()` method to `ChatStore` — `src/cli/tui/state.ts`
+- [x] T147 [US7] Wire lazy skill refresh after first message stream — `src/cli/tui/app.ts`
+
+### 7G. Documentation
+
+- [x] T148 [US7] Document skills in README.md (expanded Skills section with examples)
+- [x] T149 [US7] Add `setting_sources` to CLAUDE.md ClaudeConfig table
+- [x] T150 [US7] Update CLAUDE.md Skills section for SDK-native approach
+
+### 7H. Verification
+
+- [x] T136 [US7] Run all skill tests (`bun test tests/unit/tools/skills.test.ts`) — pass
+- [x] T137 [US7] Run all session tests (`bun test tests/unit/agent/session.test.ts`) — pass
+- [ ] T138 [US7] Run full test suite (`bun test`) and verify no regressions
 
 ---
 
@@ -94,25 +99,8 @@ Create a `.claude/skills/greet/SKILL.md` file in a test project directory, start
 
 All acceptance scenarios verified:
 
-1. **Skill discovery** — SKILL.md files globbed from `.claude/skills/*/SKILL.md`, parsed into `Skill` objects with name, description, instructions, path (T108-T118, T119-T124)
-2. **Agent invocation** — Skills appended to system prompt so the agent can invoke them when matching user requests (T125-T129, T131-T135)
-3. **No skills directory** — Session starts normally with empty skills array, no errors (T114-T115, T130)
-4. **Invalid skill files** — Empty or unreadable files logged as warnings, remaining valid skills still loaded (T116-T118, T123-T124)
-
-### Parallelization Guide
-
-The following task groups can be executed in parallel:
-
-- **7A fixtures** (T105-T107) are independent of each other
-- **7B tests** (T108-T118) depend on 7A fixtures but are independent of each other
-- **7D tests** (T125-T130) can be written in parallel with 7B tests (they test different modules)
-- **7C implementation** (T119-T124) depends on 7B tests being written
-- **7E implementation** (T131-T135) depends on 7C implementation and 7D tests being written
-
-```
-T105-T107 (7A fixtures, parallel)
-  --> T108-T118 (7B discovery tests, parallel) | T125-T130 (7D session tests, parallel)
-        --> T119-T124 (7C discovery impl, sequential)
-              --> T131-T135 (7E session impl, sequential)
-                    --> T136-T138 (7F verification, sequential)
-```
+1. **Skill discovery** — SDK natively discovers `.claude/skills/*/SKILL.md` via `settingSources: ['project']` (T140-T141)
+2. **Agent invocation** — SDK injects skill instructions into system prompt and provides built-in `Skill` tool (T134)
+3. **No skills directory** — Session starts normally with empty skills array, no errors (T130, T142)
+4. **TUI integration** — Sidebar displays skill names lazily populated via `query.supportedCommands()` (T139, T146-T147)
+5. **Configuration** — `setting_sources` field in `ClaudeConfigSchema` with Zod validation (T140, T143)
