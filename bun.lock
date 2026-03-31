@@ -11,6 +11,8 @@
         "commander": "^14.0.3",
         "marked": "15.0.12",
         "marked-terminal": "^7.3.0",
+        "pgvector": "^0.2.1",
+        "postgres": "^3.4.8",
         "remend": "^1.3.0",
         "yaml": "^2.8.3",
         "zod": "^4.3.6",
@@ -624,6 +626,8 @@
 
     "perfect-debounce": ["perfect-debounce@2.1.0", "", {}, "sha512-LjgdTytVFXeUgtHZr9WYViYSM/g8MkcTPYDlPa3cDqMirHjKiSZPYd6DoL7pK8AJQr+uWkQvCjHNdiMqsrJs+g=="],
 
+    "pgvector": ["pgvector@0.2.1", "", {}, "sha512-nKaQY9wtuiidwLMdVIce1O3kL0d+FxrigCVzsShnoqzOSaWWWOvuctb/sYwlai5cTwwzRSNa+a/NtN2kVZGNJw=="],
+
     "picocolors": ["picocolors@1.1.1", "", {}, "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA=="],
 
     "pixelmatch": ["pixelmatch@5.3.0", "", { "dependencies": { "pngjs": "^6.0.0" }, "bin": { "pixelmatch": "bin/pixelmatch" } }, "sha512-o8mkY4E/+LNUf6LzX96ht6k6CEDi65k9G2rjMtBe9Oo+VPKSvl+0GKHuH/AlG+GA5LPG/i5hrekkxUc3s2HU+Q=="],
@@ -635,6 +639,8 @@
     "planck": ["planck@1.4.3", "", { "peerDependencies": { "stage-js": "^1.0.0-alpha.12" } }, "sha512-B+lHKhRSeg7vZOfEyEzyQVu7nx8JHcX3QgnAcHXrPW0j04XYKX5eXSiUrxH2Z5QR8OoqvjD6zKIaPMdMYAd0uA=="],
 
     "pngjs": ["pngjs@7.0.0", "", {}, "sha512-LKWqWJRhstyYo9pGvgor/ivk2w94eSjE3RGVuzLGlr3NmD8bf7RcYGze1mNdEHRP6TRP6rMuDHk5t44hnTRyow=="],
+
+    "postgres": ["postgres@3.4.8", "", {}, "sha512-d+JFcLM17njZaOLkv6SCev7uoLaBtfK86vMUXhW1Z4glPWh4jozno9APvW/XKFJ3CCxVoC7OL38BqRydtu5nGg=="],
 
     "process": ["process@0.11.10", "", {}, "sha512-cdGef/drWFoydD1JsMzuFf8100nZl+GT+yacc2bEced5f9Rjk4z+WtFUTBu9PhOi9j/jfmBPu0mMEY4wIdAF8A=="],
 
