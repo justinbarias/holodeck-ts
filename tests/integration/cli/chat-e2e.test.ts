@@ -6,7 +6,9 @@ const CLI_PATH = resolve(import.meta.dir, "../../../src/cli/index.ts");
 const FIXTURE_PATH = resolve(import.meta.dir, "../../fixtures/agents/e2e-minimal.yaml");
 
 const hasCredentials = Boolean(
-	process.env.CLAUDE_CODE_OAUTH_TOKEN || process.env.ANTHROPIC_API_KEY,
+	process.env.CLAUDE_CODE_OAUTH_TOKEN ||
+		process.env.ANTHROPIC_API_KEY ||
+		process.env.ANTHROPIC_BASE_URL,
 );
 
 async function runCli(

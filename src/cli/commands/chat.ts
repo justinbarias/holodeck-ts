@@ -6,7 +6,6 @@ import type { AgentConfig } from "../../config/schema.js";
 import { loadHolodeckEnv } from "../../lib/env.js";
 import { ConfigError, toErrorMessage } from "../../lib/errors.js";
 import { setupLogging } from "../../lib/logger.js";
-import { renderStreamingMarkdown } from "../render.js";
 import { launchTUI } from "../tui/app.js";
 
 interface ChatCommandOptions {
@@ -57,8 +56,6 @@ function isMissingFileError(error: ConfigError): boolean {
 
 async function runSingleMessage(session: ChatSession, message: string): Promise<void> {
 	let responseStarted = false;
-	let streamingBuffer = "";
-	let renderedBuffer = "";
 
 	try {
 		for await (const event of sendMessage(session, message)) {
@@ -66,13 +63,7 @@ async function runSingleMessage(session: ChatSession, message: string): Promise<
 				if (!responseStarted) {
 					responseStarted = true;
 				}
-				streamingBuffer += event.content;
-				const rendered = renderStreamingMarkdown(streamingBuffer);
-				const delta = rendered.slice(renderedBuffer.length);
-				if (delta.length > 0) {
-					writeStdout(delta);
-				}
-				renderedBuffer = rendered;
+				writeStdout(event.content);
 			} else if (event.type === "tool_start") {
 				writeStderr(`\u27F3 Calling ${event.toolName}...\n`);
 			} else if (event.type === "tool_end") {

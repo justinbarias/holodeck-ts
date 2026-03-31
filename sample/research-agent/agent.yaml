@@ -3,7 +3,7 @@ description: Research-focused assistant for synthesis, fact checking, and concis
 
 model:
   provider: anthropic
-  name: claude-sonnet-4-6
+  name: ${MODEL_NAME}
   temperature: 0.2
   max_tokens: 4096
 
@@ -11,6 +11,7 @@ instructions:
   file: ./instructions/system.md
 
 claude:
+  working_directory: sample/research-agent
   permission_mode: acceptAll
   web_search: true
   max_turns: 20

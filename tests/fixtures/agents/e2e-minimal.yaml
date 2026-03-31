@@ -1,7 +1,7 @@
 name: e2e-test-agent
 model:
   provider: anthropic
-  name: claude-sonnet-4-20250514
+  name: ${MODEL_NAME}
   max_tokens: 100
   temperature: 0
 instructions:

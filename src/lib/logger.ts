@@ -4,7 +4,6 @@ import { join } from "node:path";
 import {
 	configure,
 	defaultTextFormatter,
-	getConsoleSink,
 	getLogger,
 	type Logger,
 	type LogLevel,
@@ -32,6 +31,13 @@ function getFileSink(): Sink {
 	};
 }
 
+function getStderrSink(): Sink {
+	return (record) => {
+		const text = defaultTextFormatter(record);
+		process.stderr.write(text);
+	};
+}
+
 export async function setupLogging(options: LoggingOptions): Promise<void> {
 	const key = `${options.verbose}-${options.tui}`;
 	if (initialized && initializedKey === key) {
@@ -42,9 +48,9 @@ export async function setupLogging(options: LoggingOptions): Promise<void> {
 
 	const sinks: Record<string, Sink> = options.tui
 		? { file: getFileSink() }
-		: { console: getConsoleSink() };
+		: { stderr: getStderrSink() };
 
-	const sinkName = options.tui ? "file" : "console";
+	const sinkName = options.tui ? "file" : "stderr";
 
 	await configure({
 		reset: true,
