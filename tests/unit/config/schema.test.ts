@@ -170,3 +170,47 @@ describe("config/schema", () => {
 		).toBe(false);
 	});
 });
+
+describe("ClaudeConfigSchema setting_sources", () => {
+	it("accepts valid setting_sources array", () => {
+		const result = ClaudeConfigSchema.safeParse({
+			setting_sources: ["project"],
+		});
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.data.setting_sources).toEqual(["project"]);
+		}
+	});
+
+	it("accepts all valid source values", () => {
+		const result = ClaudeConfigSchema.safeParse({
+			setting_sources: ["user", "project", "local"],
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it("defaults to ['project'] when not specified", () => {
+		const result = ClaudeConfigSchema.safeParse({});
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.data.setting_sources).toEqual(["project"]);
+		}
+	});
+
+	it("rejects invalid source values", () => {
+		const result = ClaudeConfigSchema.safeParse({
+			setting_sources: ["invalid"],
+		});
+		expect(result.success).toBe(false);
+	});
+
+	it("accepts empty array to disable all sources", () => {
+		const result = ClaudeConfigSchema.safeParse({
+			setting_sources: [],
+		});
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.data.setting_sources).toEqual([]);
+		}
+	});
+});

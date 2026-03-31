@@ -123,6 +123,7 @@ export const ClaudeConfigSchema = z.strictObject({
 	file_system: FileSystemConfigSchema.optional(),
 	subagents: SubagentsConfigSchema.optional(),
 	allowed_tools: z.array(z.string()).nullable().default(null),
+	setting_sources: z.array(z.enum(["user", "project", "local"])).default(["project"]),
 });
 
 export const AgentConfigSchema = z
