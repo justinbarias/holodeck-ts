@@ -152,6 +152,31 @@ describe("agent/session", () => {
 		});
 	});
 
+	// US7: SDK native skill discovery
+	describe("skill discovery via SDK", () => {
+		// T125/T126: session starts with empty skills (populated lazily)
+		it("initializes with empty skills array", async () => {
+			const config = createMinimalConfig();
+			const session = await createChatSession(config);
+			expect(session.skills).toEqual([]);
+		});
+
+		// T130: session creates without errors when no skills directory
+		it("creates session successfully regardless of skills directory", async () => {
+			const tempDir = mkdtempSync(join(tmpdir(), "holodeck-noskills-"));
+			try {
+				const config = createMinimalConfig({
+					claude: { working_directory: tempDir },
+				});
+				const session = await createChatSession(config);
+				expect(session.state).toBe("prompting");
+				expect(session.skills).toEqual([]);
+			} finally {
+				rmSync(tempDir, { recursive: true, force: true });
+			}
+		});
+	});
+
 	// T077: interruptResponse() tests
 	describe("interruptResponse", () => {
 		it("transitions streaming → prompting", async () => {
