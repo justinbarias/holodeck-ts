@@ -193,6 +193,11 @@ export class ChatStore {
 		this.notify();
 	}
 
+	updateSkills(skills: string[]): void {
+		this.state = { ...this.state, skills };
+		this.notify();
+	}
+
 	toggleSidebar(): void {
 		this.state.sidebarVisible = !this.state.sidebarVisible;
 		this.notify();

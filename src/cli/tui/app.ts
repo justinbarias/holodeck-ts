@@ -170,6 +170,11 @@ export async function launchTUI(session: ChatSession, config: AgentConfig): Prom
 			const eventStream = sendMessage(session, text);
 			const result = await processEventStream(eventStream, store);
 
+			// Lazily populate skills after the first message (populateSkills runs inside sendMessage)
+			if (session.skills.length > 0 && store.getState().skills.length === 0) {
+				store.updateSkills(session.skills.map((s) => s.name));
+			}
+
 			// Update token/context counts from session
 			if (session.contextUsage) {
 				store.updateContextPercentage(Math.round(session.contextUsage.percentage));
