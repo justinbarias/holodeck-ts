@@ -1,6 +1,6 @@
 // src/cli/tui/app.ts
 import { BoxRenderable, createCliRenderer, type KeyEvent } from "@opentui/core";
-import type { ChatSession } from "../../agent/session.js";
+import type { ChatSession, ToolInvocationRecord } from "../../agent/session.js";
 import { closeSession, interruptResponse, sendMessage } from "../../agent/session.js";
 import type { AgentConfig } from "../../config/schema.js";
 import { toErrorMessage } from "../../lib/errors.js";
@@ -11,6 +11,13 @@ import { createSidebar } from "./components/sidebar.js";
 import { createStatusBar } from "./components/status-bar.js";
 import { processEventStream } from "./hooks.js";
 import { ChatStore, type ToolInfo } from "./state.js";
+
+export function formatToolInspection(invocation: ToolInvocationRecord | null): string {
+	if (!invocation) return "No recent tool invocation";
+	const args = invocation.args !== null ? JSON.stringify(invocation.args, null, 2) : "(none)";
+	const result = invocation.result !== null ? JSON.stringify(invocation.result, null, 2) : "(none)";
+	return `[${invocation.status}] ${invocation.toolName}\nArgs: ${args}\nResult: ${result}`;
+}
 
 export async function launchTUI(session: ChatSession, config: AgentConfig): Promise<void> {
 	const renderer = await createCliRenderer({
@@ -96,6 +103,12 @@ export async function launchTUI(session: ChatSession, config: AgentConfig): Prom
 		if (key.ctrl && key.shift && key.name === "b") {
 			store.toggleSidebar();
 			sidebar.container.visible = store.getState().sidebarVisible;
+			return;
+		}
+
+		// Ctrl+O: inspect last tool invocation
+		if (key.ctrl && key.name === "o") {
+			store.setStatusMessage(formatToolInspection(session.lastToolInvocation));
 			return;
 		}
 

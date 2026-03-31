@@ -72,6 +72,14 @@ async function runSingleMessage(session: ChatSession, message: string): Promise<
 					writeStdout(delta);
 				}
 				renderedBuffer = rendered;
+			} else if (event.type === "tool_start") {
+				writeStderr(`\u27F3 Calling ${event.toolName}...\n`);
+			} else if (event.type === "tool_end") {
+				if (event.status === "done") {
+					writeStderr(`\u2713 ${event.toolName} done\n`);
+				} else {
+					writeStderr(`\u2717 ${event.toolName} failed${event.error ? `: ${event.error}` : ""}\n`);
+				}
 			} else if (event.type === "context_warning") {
 				writeStderr(
 					`Warning: Context usage at ${Math.round(event.ratio * 100)}% -- older messages may be summarized soon.\n`,

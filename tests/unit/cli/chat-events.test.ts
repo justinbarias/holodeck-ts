@@ -77,6 +77,14 @@ function makeResultMessage(sessionId: string): SDKMessage {
 	} as never;
 }
 
+function makeToolSummaryMessage(summary: string): SDKMessage {
+	return {
+		type: "tool_use_summary",
+		summary,
+		session_id: "sess-tool",
+	} as never;
+}
+
 function makeCompactBoundaryMessage(): SDKMessage {
 	return {
 		type: "system",
@@ -130,5 +138,61 @@ describe("cli/chat — context event rendering (T062-T063)", () => {
 		const stderr = stderrSpy.mock.calls.map((call) => String(call[0])).join("");
 		expect(stderr).toContain("Info: Conversation compacted");
 		expect(stderr).toContain("older messages have been summarized");
+	});
+});
+
+describe("cli/chat — tool event rendering (T068a-T069)", () => {
+	it("T068a: renders tool_start to stderr", async () => {
+		currentFakeQueryOpts = {
+			messages: [
+				makeInitMessage("sess-tool"),
+				makeToolSummaryMessage("Calling Read..."),
+				makeResultMessage("sess-tool"),
+			],
+		};
+
+		const stderrSpy = spyOn(process.stderr, "write");
+		spyOn(process.stdout, "write");
+
+		await runChatCommand({ agent: FIXTURE_PATH, prompt: "test" });
+
+		const stderr = stderrSpy.mock.calls.map((call) => String(call[0])).join("");
+		expect(stderr).toContain("\u27F3 Calling Read...");
+	});
+
+	it("T068b: renders tool_end done to stderr", async () => {
+		currentFakeQueryOpts = {
+			messages: [
+				makeInitMessage("sess-tool"),
+				makeToolSummaryMessage("Read done"),
+				makeResultMessage("sess-tool"),
+			],
+		};
+
+		const stderrSpy = spyOn(process.stderr, "write");
+		spyOn(process.stdout, "write");
+
+		await runChatCommand({ agent: FIXTURE_PATH, prompt: "test" });
+
+		const stderr = stderrSpy.mock.calls.map((call) => String(call[0])).join("");
+		expect(stderr).toContain("\u2713 Read done");
+	});
+
+	it("T069: renders tool_end failed with error to stderr", async () => {
+		currentFakeQueryOpts = {
+			messages: [
+				makeInitMessage("sess-tool"),
+				makeToolSummaryMessage("Write failed: permission denied"),
+				makeResultMessage("sess-tool"),
+			],
+		};
+
+		const stderrSpy = spyOn(process.stderr, "write");
+		spyOn(process.stdout, "write");
+
+		await runChatCommand({ agent: FIXTURE_PATH, prompt: "test" });
+
+		const stderr = stderrSpy.mock.calls.map((call) => String(call[0])).join("");
+		expect(stderr).toContain("\u2717 Write failed: permission denied");
 	});
 });

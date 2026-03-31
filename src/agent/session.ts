@@ -1,7 +1,6 @@
 import {
 	type McpServerConfig,
 	type Options,
-	type PermissionMode,
 	type Query,
 	query,
 	type SDKControlGetContextUsageResponse,
@@ -13,6 +12,7 @@ import { getModuleLogger } from "../lib/logger.js";
 import { buildMCPServers } from "../tools/mcp.js";
 import { discoverSkills, type Skill } from "../tools/skills.js";
 import { buildHooks } from "./hooks.js";
+import { createPermissionHandler, type PromptFn } from "./permissions.js";
 import type { ChatEvent, SessionState } from "./streaming.js";
 import { mapSDKMessages, type StreamContext } from "./streaming.js";
 
@@ -40,30 +40,21 @@ export interface ChatSession {
 	contextWarningShown: boolean;
 	onCompactionStart?: () => void;
 	onCompactionEnd?: () => void;
-}
-
-function mapPermissionMode(
-	permissionMode: "manual" | "acceptEdits" | "acceptAll" | undefined,
-): PermissionMode {
-	switch (permissionMode) {
-		case "acceptEdits":
-			return "acceptEdits";
-		case "acceptAll":
-			return "bypassPermissions";
-		default:
-			return "default";
-	}
+	promptFn?: PromptFn;
 }
 
 function buildQueryOptions(session: ChatSession): Options {
 	const claude = session.agentConfig.claude;
-	const permissionMode = mapPermissionMode(claude?.permission_mode);
+	const { permissionMode, canUseTool } = createPermissionHandler(
+		claude?.permission_mode,
+		session.promptFn,
+	);
 
 	return {
 		model: session.agentConfig.model.name,
 		systemPrompt: session.systemPrompt,
 		permissionMode,
-		allowDangerouslySkipPermissions: permissionMode === "bypassPermissions",
+		canUseTool,
 		maxTurns: claude?.max_turns,
 		allowedTools: claude?.allowed_tools ?? undefined,
 		cwd: claude?.working_directory,
