@@ -17,5 +17,8 @@
 		"editor.defaultFormatter": "biomejs.biome"
 	},
 	"typescript.tsdk": "node_modules/typescript/lib",
-	"typescript.enablePromptUseWorkspaceTsdk": true
+	"typescript.enablePromptUseWorkspaceTsdk": true,
+	"yaml.schemas": {
+		"./schema/agent.schema.json": ["agent.yaml", "agent.*.yaml", "**/agents/*.yaml"]
+	}
 }

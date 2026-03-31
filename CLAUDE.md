@@ -12,6 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - CLI infrastructure (Commander): **Planned**
 - Agent execution (Claude Agent SDK): **Planned**
+- Structured output (schema-enforced responses): **Planned**
 - Evaluation framework (Anthropic methodology): **Planned**
 - Chat interface: **Planned**
 - OpenTelemetry integration: **Planned**
@@ -116,8 +117,7 @@ holodeck-ts/
 │   │
 │   ├── config/                      # Configuration management
 │   │   ├── loader.ts                # YAML parsing with env var substitution
-│   │   ├── schema.ts                # All Zod schemas (Agent, Tools, Evals, etc.)
-│   │   └── defaults.ts              # Default configuration values
+│   │   └── schema.ts                # All Zod schemas (Agent, Tools, Evals, etc.) with inline defaults
 │   │
 │   ├── agent/                       # Claude Agent SDK integration
 │   │   ├── executor.ts              # query() wrapper with hook registration
@@ -329,6 +329,12 @@ export async function loadAgent(path: string) {
 ```
 
 ### Claude Agent SDK Integration
+
+> **Reference implementations:** Before writing new SDK integration code, consult:
+> 1. `/tmp/claude-agent-sdk-demos` — Official demo projects (cloned from [github.com/anthropics/claude-agent-sdk-demos](https://github.com/anthropics/claude-agent-sdk-demos)). Key demos: `email-agent/ccsdk/session.ts` (multi-turn with `resume`), `simple-chatapp/server/session.ts` (message handling), `hello-world/hello-world.ts` (hooks, options).
+> 2. The `claude-agent-sdk-skill` slash command — use `/claude-agent-sdk-skill` for up-to-date SDK patterns including `query()`, hooks, MCP servers, custom tools, and permissions.
+>
+> Always prefer patterns from these references over inventing new SDK integration approaches.
 
 ```typescript
 import { query } from "@anthropic-ai/claude-agent-sdk";
@@ -572,6 +578,7 @@ Transcript-based grading follows Anthropic's recommendation to evaluate agent be
 | `file_system` | object | No | — | `{ read, write, edit }` (all boolean) |
 | `subagents` | object | No | — | `{ enabled, max_parallel: 1-16 }` |
 | `allowed_tools` | string[] | No | null | Explicit tool allowlist (null = all) |
+| `setting_sources` | string[] | No | `["project"]` | SDK setting sources: `user`, `project`, `local`. Controls SKILL.md and CLAUDE.md loading |
 
 ### ObservabilityConfig
 
@@ -640,7 +647,9 @@ Tool design follows [Anthropic's principles](https://www.anthropic.com/engineeri
 
 ### Skills
 
-SKILL.md files in `.claude/skills/*/SKILL.md` are auto-discovered when `settingSources: ["user", "project"]` is configured. Claude invokes them when the task matches the skill description.
+SKILL.md files in `.claude/skills/*/SKILL.md` are auto-discovered by the Claude Agent SDK when `setting_sources` includes `"project"` (the default). The SDK handles frontmatter parsing, system prompt injection, and provides a built-in `Skill` tool for invocation. Configure via `claude.setting_sources` in `agent.yaml`.
+
+Skill metadata (name, description) is available at runtime via `query.supportedCommands()` and displayed in the TUI sidebar.
 
 ## Evaluation Framework
 
@@ -774,6 +783,7 @@ Follow OpenTelemetry [GenAI semantic conventions](https://opentelemetry.io/docs/
 
 ## Additional Resources
 
+- [Claude Agent SDK Demos](https://github.com/anthropics/claude-agent-sdk-demos) — Official reference implementations (local clone: `/tmp/claude-agent-sdk-demos`)
 - [Claude Agent SDK Overview](https://platform.claude.com/docs/en/agent-sdk/overview)
 - [Claude Agent SDK TypeScript Reference](https://platform.claude.com/docs/en/agent-sdk/typescript)
 - [Anthropic Contextual Retrieval](https://www.anthropic.com/engineering/contextual-retrieval)
@@ -786,3 +796,37 @@ Follow OpenTelemetry [GenAI semantic conventions](https://opentelemetry.io/docs/
 - [Bun Documentation](https://bun.sh/docs)
 - [Biome Documentation](https://biomejs.dev)
 - [Commander Documentation](https://github.com/tj/commander.js)
+
+## OpenTUI (@opentui/core) Patterns
+
+**CRITICAL: VNode Proxy vs Renderable** — OpenTUI has two APIs:
+
+1. **Construct API** (`Text()`, `Box()`) — returns a `ProxiedVNode`. After tree insertion, setting properties on the VNode proxy does **NOT** propagate to the real renderable. Use only for static content.
+2. **Renderable API** (`new TextRenderable(renderer, ...)`, `new BoxRenderable(renderer, ...)`) — returns the real renderable instance. Property changes propagate immediately. **Use for any content that needs post-insertion updates.**
+
+```typescript
+// WRONG — VNode proxy, updates won't render:
+const label = Text({ id: "label", content: "initial" });
+container.add(label);
+label.content = "updated"; // ❌ Silently ignored after tree insertion
+
+// CORRECT — real renderable, updates render:
+const label = new TextRenderable(renderer, { id: "label", content: "initial" });
+container.add(label);
+label.content = "updated"; // ✅ Renders immediately
+```
+
+**Other OpenTUI Rules:**
+- `container.add()` is **not variadic** — call once per child: `container.add(a); container.add(b);`
+- `TextareaRenderable.plainText` is **read-only** — use `textarea.setText("")` to clear
+- `ScrollBoxRenderable`: use `stickyScroll: true` + `stickyStart: "bottom"` for auto-scroll to latest content
+- `MarkdownRenderable`: has `streaming: true` mode, but for buffer-then-render use `TextRenderable` while streaming, swap to `MarkdownRenderable` on completion
+- `findDescendantById()` returns real renderables from a container, but only works reliably when called on a real `BoxRenderable` instance, not on a VNode proxy cast
+
+## Active Technologies
+- TypeScript 5.8.3 (strict, `@tsconfig/bun`) + `@anthropic-ai/claude-agent-sdk` 0.2.87, `commander` 14.0.3, `zod` 4.3.6, `yaml` 2.8.3, `marked` 15.0.12, `marked-terminal` 7.3.0, `remend` 1.3.0, `logtape` 2.0.5, `@opentui/core` 0.1.93 (001-holodeck-chat)
+- In-memory only (session state, no persistence) (001-holodeck-chat)
+
+## Recent Changes
+- 001-holodeck-chat: Added chat feature dependencies (`marked`, `marked-terminal`, `remend`, `logtape`)
+- 001-holodeck-chat: Added OpenTUI-based TUI replacing readline chat REPL

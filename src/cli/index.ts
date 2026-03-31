@@ -1,17 +1,12 @@
 #!/usr/bin/env bun
 import { Command } from "commander";
 import { VERSION } from "../index.js";
+import { chatCommand } from "./commands/chat.js";
 
 const program = new Command();
 
 program.name("holodeck").description("No-code AI agent experimentation platform").version(VERSION);
-
-program
-	.command("chat [config]")
-	.description("Interactive streaming chat session")
-	.action((_config?: string) => {
-		console.log("holodeck chat — not yet implemented");
-	});
+program.addCommand(chatCommand());
 
 program
 	.command("test [config]")
@@ -22,7 +17,8 @@ program
 	.option("-q, --quiet", "Summary only")
 	.option("--timeout <seconds>", "LLM execution timeout", "60")
 	.action((_config?: string) => {
-		console.log("holodeck test — not yet implemented");
+		process.stderr.write("holodeck test is not yet implemented.\n");
+		process.exitCode = 1;
 	});
 
-program.parse();
+await program.parseAsync(process.argv);

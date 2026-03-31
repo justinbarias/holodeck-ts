@@ -1,0 +1,6 @@
+name: env-var-agent
+model:
+  provider: anthropic
+  name: "${MODEL_NAME}"
+instructions:
+  inline: "${CUSTOM_INSTRUCTION}"

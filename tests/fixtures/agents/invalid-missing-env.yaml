@@ -1,0 +1,6 @@
+name: missing-env-agent
+model:
+  provider: anthropic
+  name: "${NONEXISTENT_MODEL_VAR}"
+instructions:
+  inline: "${NONEXISTENT_INSTRUCTION_VAR}"

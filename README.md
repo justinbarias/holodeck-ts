@@ -15,6 +15,7 @@ Build, test, and evaluate AI agents through pure YAML configuration. Built exclu
 
 - **No-code agent definition** — define agents, tools, evaluations, and test cases entirely in YAML
 - **Claude Agent SDK native** — built exclusively on Anthropic's [Claude Agent SDK](https://platform.claude.com/docs/en/agent-sdk/typescript) for TypeScript
+- **Structured output** — schema-enforced agent responses for deterministic, machine-readable output
 - **Interactive chat** (`holodeck chat`) — streaming conversations with your agents
 - **Test runner** (`holodeck test`) — run test cases with [Anthropic-style evaluation](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents)
 - **Hierarchical vectorstore** — contextual retrieval using [Anthropic's methodology](https://www.anthropic.com/engineering/contextual-retrieval)
@@ -79,7 +80,7 @@ claude:
 ```bash
 holodeck chat
 # or specify a config
-holodeck chat path/to/agent.yaml
+holodeck chat --agent path/to/agent.yaml
 ```
 
 ### Test
@@ -171,10 +172,10 @@ claude:
   subagents:
     enabled: true
     max_parallel: 4
-  allowed_tools:                      # null = all configured tools
-    - knowledge_base
-    - github
-    - Read
+  allowed_tools:                      # null = all tools available
+    - knowledge_base                  # HoloDeck tool (by name from tools[])
+    - github                          # HoloDeck MCP tool (by name from tools[])
+    - Read                            # Claude Code built-in tool
     - Write
     - Bash
 
@@ -258,7 +259,7 @@ observability:
 
 | Command | Description |
 |---|---|
-| `holodeck chat [config]` | Interactive chat session with streaming |
+| `holodeck chat [--agent <path>]` | Interactive chat session with streaming |
 | `holodeck test [config]` | Run test cases with evaluation grading |
 
 **`holodeck test` options:**
@@ -304,11 +305,95 @@ Define tools programmatically using the Claude Agent SDK's `tool()` function wit
 
 ### Skills
 
-Reusable agent capabilities defined as `SKILL.md` files, automatically discovered and invoked by Claude when relevant.
+Reusable agent capabilities defined as `SKILL.md` files. Skills are automatically discovered from `.claude/skills/*/SKILL.md` in the project directory and injected into the agent's system prompt by the Claude Agent SDK.
+
+**Creating a skill:**
+
+```
+your-project/
+  .claude/
+    skills/
+      deploy/
+        SKILL.md
+      research/
+        SKILL.md
+```
+
+Each `SKILL.md` supports optional YAML frontmatter:
+
+~~~markdown
+---
+name: deploy
+description: Automated deployment pipeline with zero-downtime rolling updates
+---
+
+# Deploy Skill
+
+Run the deploy pipeline for any environment.
+
+## Usage
+
+The agent will invoke this skill when deployment tasks are requested.
+~~~
+
+- `name` — skill identifier (defaults to directory name if omitted)
+- `description` — shown in skill listings; helps the agent decide when to invoke the skill
+- The markdown body becomes the skill's instructions, injected into the system prompt
+
+**Configuration:**
+
+Skills are loaded when `setting_sources` includes `"project"` (the default):
+
+```yaml
+claude:
+  setting_sources: ["project"]  # default — enables skill auto-discovery
+```
+
+Set `setting_sources: []` to disable skill loading. The built-in `Skill` tool must be available (included in `allowed_tools` or `allowed_tools: null`).
 
 ### Native Claude Code Tools
 
 Full access to built-in Claude Code tools: Read, Write, Edit, Bash, Glob, Grep, WebSearch, WebFetch.
+
+### `allowed_tools` Reference
+
+The `claude.allowed_tools` field controls which tools are auto-approved without permission prompts. Set to `null` (default) for all tools. Values are **case-sensitive strings** from three categories:
+
+**HoloDeck-defined tools** — the `name` field from your `tools[]` entries:
+
+```yaml
+allowed_tools:
+  - knowledge_base    # matches tools[].name
+  - github            # matches tools[].name
+```
+
+**Claude Code built-in tools:**
+
+| Tool | Description | | Tool | Description |
+|------|-------------|-|------|-------------|
+| `Read` | Read files | | `WebFetch` | Fetch URL content |
+| `Write` | Create/overwrite files | | `WebSearch` | Web search |
+| `Edit` | Targeted file edits | | `Agent` | Spawn subagents |
+| `Bash` | Shell commands | | `Skill` | Execute skills |
+| `Glob` | Find files by pattern | | `NotebookEdit` | Edit Jupyter notebooks |
+| `Grep` | Search file contents | | `AskUserQuestion` | Ask user questions |
+
+<details>
+<summary>Full list of built-in tools</summary>
+
+`Agent`, `AskUserQuestion`, `Bash`, `CronCreate`, `CronDelete`, `CronList`, `Edit`, `EnterPlanMode`, `EnterWorktree`, `ExitPlanMode`, `ExitWorktree`, `Glob`, `Grep`, `ListMcpResourcesTool`, `LSP`, `NotebookEdit`, `PowerShell`, `Read`, `ReadMcpResourceTool`, `Skill`, `TaskCreate`, `TaskGet`, `TaskList`, `TaskOutput`, `TaskStop`, `TaskUpdate`, `TodoWrite`, `ToolSearch`, `WebFetch`, `WebSearch`, `Write`
+
+</details>
+
+**MCP server tools** — referenced as `mcp__<serverName>__<toolName>`:
+
+```yaml
+allowed_tools:
+  - mcp__playwright__navigate
+  - mcp__github__search_issues
+```
+
+> **Note:** `allowed_tools` auto-approves listed tools but does not restrict the agent to only those tools. Unlisted tools fall through to the `permission_mode` setting. For a locked-down agent, combine `allowed_tools` with `permission_mode: manual`.
 
 ## Evaluation
 
@@ -427,13 +512,16 @@ bun run typecheck    # tsc --noEmit
 | Agent SDK | [@anthropic-ai/claude-agent-sdk](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) |
 | Linting/Formatting | [Biome](https://biomejs.dev) |
 | Testing | [Bun test](https://bun.sh/docs/cli/test) |
+| Logging | [LogTape](https://logtape.org/) (OTel-ready via [@logtape/otel](https://logtape.org/sinks/otel)) |
 | Observability | [OpenTelemetry](https://opentelemetry.io/) |
+| Markdown Rendering | [marked](https://marked.js.org/) + [marked-terminal](https://github.com/mikaelbr/marked-terminal) |
 | Config | [yaml](https://www.npmjs.com/package/yaml) + Zod |
 
 ## Roadmap
 
 - [ ] `holodeck chat` — interactive streaming chat
 - [ ] `holodeck test` — test runner with evaluation
+- [ ] Structured output — schema-enforced agent responses
 - [ ] OpenTelemetry integration
 - [ ] Hierarchical vectorstore with contextual retrieval
 - [ ] MCP server support (stdio, HTTP/SSE)

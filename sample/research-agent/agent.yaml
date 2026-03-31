@@ -1,0 +1,20 @@
+name: research-agent
+description: Research-focused assistant for synthesis, fact checking, and concise technical summaries.
+
+model:
+  provider: anthropic
+  name: ${MODEL_NAME}
+  temperature: 0.2
+  max_tokens: 4096
+
+instructions:
+  file: ./instructions/system.md
+
+claude:
+  working_directory: sample/research-agent
+  permission_mode: acceptAll
+  web_search: true
+  max_turns: 20
+  extended_thinking:
+    enabled: true
+    budget_tokens: 4000
