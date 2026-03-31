@@ -291,29 +291,35 @@ describe("agent/streaming", () => {
 		}
 	});
 
-	it("silently skips prompt_suggestion and tool_progress messages", async () => {
+	it("silently skips prompt_suggestion messages", async () => {
 		const ctx = stubContext();
-		const messages = messagesFrom(
-			{
-				type: "prompt_suggestion",
-				suggestion: "Try asking about...",
-				uuid: "uuid-ps",
-				session_id: "session-ps",
-			} as never,
-			{
-				type: "tool_progress",
-				tool_use_id: "tu-1",
-				tool_name: "Read",
-				parent_tool_use_id: null,
-				elapsed_time_seconds: 5,
-				uuid: "uuid-tp",
-				session_id: "session-tp",
-			} as never,
-		);
+		const messages = messagesFrom({
+			type: "prompt_suggestion",
+			suggestion: "Try asking about...",
+			uuid: "uuid-ps",
+			session_id: "session-ps",
+		} as never);
 
 		const events = await collectEvents(mapSDKMessages(messages, ctx));
 
 		expect(events).toEqual([]);
+	});
+
+	it("maps tool_progress to tool_progress events", async () => {
+		const ctx = stubContext();
+		const messages = messagesFrom({
+			type: "tool_progress",
+			tool_use_id: "tu-1",
+			tool_name: "Read",
+			parent_tool_use_id: null,
+			elapsed_time_seconds: 5,
+			uuid: "uuid-tp",
+			session_id: "session-tp",
+		} as never);
+
+		const events = await collectEvents(mapSDKMessages(messages, ctx));
+
+		expect(events).toEqual([{ type: "tool_progress", toolName: "Read", elapsedSeconds: 5 }]);
 	});
 
 	it("maps assistant messages with multiple content blocks", async () => {

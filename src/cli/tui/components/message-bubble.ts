@@ -1,7 +1,6 @@
 // src/cli/tui/components/message-bubble.ts
 import {
-	Box,
-	type BoxRenderable,
+	BoxRenderable,
 	MarkdownRenderable,
 	type RenderContext,
 	RGBA,
@@ -9,11 +8,12 @@ import {
 	Text,
 } from "@opentui/core";
 import type { ChatMessage } from "../state.js";
-import { AGENT_COLOR, TEXT_PRIMARY, USER_COLOR } from "../theme.js";
+import { AGENT_COLOR, USER_COLOR } from "../theme.js";
 
 const syntaxStyle = SyntaxStyle.fromStyles({
 	"markup.heading.1": { fg: RGBA.fromHex("#58A6FF"), bold: true },
 	"markup.heading.2": { fg: RGBA.fromHex("#58A6FF"), bold: true },
+	"markup.heading.3": { fg: RGBA.fromHex("#58A6FF"), bold: true },
 	"markup.list": { fg: RGBA.fromHex("#FF7B72") },
 	"markup.raw": { fg: RGBA.fromHex("#A5D6FF") },
 	"markup.bold": { bold: true },
@@ -24,8 +24,7 @@ const syntaxStyle = SyntaxStyle.fromStyles({
 
 export interface MessageBubbleRefs {
 	container: BoxRenderable;
-	contentText: ReturnType<typeof Text> | null;
-	contentMarkdown: MarkdownRenderable | null;
+	contentMarkdown: MarkdownRenderable;
 }
 
 export function createMessageBubble(
@@ -36,7 +35,7 @@ export function createMessageBubble(
 	const roleLabel = isUser ? "You:" : "Agent:";
 	const roleColor = isUser ? USER_COLOR : AGENT_COLOR;
 
-	const container = Box({
+	const container = new BoxRenderable(renderer, {
 		id: `bubble-${message.id}`,
 		width: "100%",
 		flexDirection: "column",
@@ -50,60 +49,27 @@ export function createMessageBubble(
 		}),
 	);
 
-	const refs: MessageBubbleRefs = {
-		container: container as unknown as BoxRenderable,
-		contentText: null,
-		contentMarkdown: null,
-	};
-
-	if (message.isStreaming || message.content.length === 0) {
-		const textNode = Text({
-			id: `content-${message.id}`,
-			content: message.content,
-			fg: TEXT_PRIMARY,
-		});
-		container.add(textNode);
-		refs.contentText = textNode;
-	} else {
-		const md = new MarkdownRenderable(renderer, {
-			id: `content-${message.id}`,
-			content: message.content,
-			syntaxStyle,
-			width: "100%",
-			streaming: false,
-		});
-		container.add(md);
-		refs.contentMarkdown = md;
-	}
-
-	return refs;
-}
-
-export function updateBubbleContent(refs: MessageBubbleRefs, content: string): void {
-	if (refs.contentText) {
-		(refs.contentText as unknown as { content: string }).content = content;
-	}
-}
-
-export function finalizeBubble(
-	renderer: RenderContext,
-	refs: MessageBubbleRefs,
-	message: ChatMessage,
-): void {
-	if (!refs.contentText) return;
-
-	const container = refs.container;
-	const textId = `content-${message.id}`;
-	container.remove(textId);
-	refs.contentText = null;
-
+	// Always use MarkdownRenderable — streaming:true for incremental updates,
+	// set streaming:false on finalize. Avoids VNode proxy remove/add issues.
 	const md = new MarkdownRenderable(renderer, {
-		id: textId,
+		id: `content-${message.id}`,
 		content: message.content,
 		syntaxStyle,
 		width: "100%",
-		streaming: false,
+		streaming: message.isStreaming || message.content.length === 0,
 	});
 	container.add(md);
-	refs.contentMarkdown = md;
+
+	return {
+		container,
+		contentMarkdown: md,
+	};
+}
+
+export function updateBubbleContent(refs: MessageBubbleRefs, content: string): void {
+	refs.contentMarkdown.content = content;
+}
+
+export function finalizeBubble(refs: MessageBubbleRefs): void {
+	refs.contentMarkdown.streaming = false;
 }

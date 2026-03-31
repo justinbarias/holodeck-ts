@@ -1,11 +1,5 @@
-import {
-	Box,
-	type BoxRenderable,
-	type RenderContext,
-	Text,
-	TextareaRenderable,
-} from "@opentui/core";
-import { BORDER, CYAN, SURFACE, TEXT_DIM, TEXT_PRIMARY } from "../theme.js";
+import { BoxRenderable, type RenderContext, Text, TextareaRenderable } from "@opentui/core";
+import { CYAN, SURFACE, TEXT_DIM, TEXT_PRIMARY } from "../theme.js";
 
 export interface InputBarOptions {
 	onSubmit: (text: string) => void;
@@ -17,14 +11,12 @@ export interface InputBarRefs {
 }
 
 export function createInputBar(renderer: RenderContext, options: InputBarOptions): InputBarRefs {
-	const container = Box({
+	const container = new BoxRenderable(renderer, {
 		id: "input-bar",
 		width: "100%",
-		borderStyle: "single",
-		borderColor: BORDER,
 		flexDirection: "row",
-		alignItems: "flex-end",
-		padding: 0,
+		flexShrink: 0,
+		alignItems: "center",
 		paddingLeft: 1,
 		paddingRight: 1,
 	});
@@ -71,7 +63,7 @@ export function createInputBar(renderer: RenderContext, options: InputBarOptions
 	container.add(hint);
 
 	return {
-		container: container as unknown as BoxRenderable,
+		container,
 		textarea,
 	};
 }

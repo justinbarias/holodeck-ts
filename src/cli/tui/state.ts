@@ -141,6 +141,16 @@ export class ChatStore {
 		this.notify();
 	}
 
+	updateToolProgress(toolName: string, _elapsedSeconds: number): void {
+		// If no active tool, start it (tool_progress can arrive before content_block_start)
+		if (!this.state.currentToolStatus) {
+			this.setActiveToolCall(toolName);
+			return;
+		}
+		// Don't reset startedAt — just notify to refresh the spinner display
+		this.notify();
+	}
+
 	clearActiveToolCall(toolName: string, status: "done" | "failed", error?: string): void {
 		if (status === "failed") {
 			this.state.statusMessage = `${toolName} failed${error ? `: ${error}` : ""}`;

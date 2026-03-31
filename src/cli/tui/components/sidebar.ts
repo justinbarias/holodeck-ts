@@ -1,17 +1,25 @@
 // src/cli/tui/components/sidebar.ts
-import { Box, type BoxRenderable, Text } from "@opentui/core";
+import { BoxRenderable, type RenderContext, Text, TextRenderable } from "@opentui/core";
 import type { ChatStore } from "../state.js";
-import { BORDER, CYAN, SURFACE, TEXT_DIM, TEXT_PRIMARY, TEXT_SECONDARY } from "../theme.js";
+import {
+	BORDER,
+	CYAN,
+	SURFACE,
+	TEXT_DIM,
+	TEXT_PRIMARY,
+	TEXT_SECONDARY,
+	WARNING_YELLOW,
+} from "../theme.js";
 
 export interface SidebarRefs {
 	container: BoxRenderable;
 	dispose: () => void;
 }
 
-export function createSidebar(store: ChatStore): SidebarRefs {
+export function createSidebar(renderer: RenderContext, store: ChatStore): SidebarRefs {
 	const s = store.getState();
 
-	const container = Box({
+	const container = new BoxRenderable(renderer, {
 		id: "sidebar",
 		width: "25%",
 		minWidth: 18,
@@ -66,31 +74,53 @@ export function createSidebar(store: ChatStore): SidebarRefs {
 		}
 	}
 
-	// Stats section (updated dynamically)
+	// Stats section — use TextRenderable directly for dynamic updates
 	container.add(Text({ id: "sidebar-label-stats", content: "── Stats", fg: TEXT_DIM }));
-	const turnsText = Text({ id: "sidebar-turns", content: "Turns: 0", fg: TEXT_SECONDARY });
-	const tokensInText = Text({ id: "sidebar-tokens-in", content: "In: 0", fg: TEXT_SECONDARY });
-	const tokensOutText = Text({ id: "sidebar-tokens-out", content: "Out: 0", fg: TEXT_SECONDARY });
+	const turnsText = new TextRenderable(renderer, {
+		id: "sidebar-turns",
+		content: "Turns: 0",
+		fg: TEXT_SECONDARY,
+	});
+	const tokensText = new TextRenderable(renderer, {
+		id: "sidebar-tokens",
+		content: "Tokens: 0",
+		fg: TEXT_SECONDARY,
+	});
+	const contextText = new TextRenderable(renderer, {
+		id: "sidebar-context",
+		content: "",
+		fg: TEXT_SECONDARY,
+	});
 	container.add(turnsText);
-	container.add(tokensInText);
-	container.add(tokensOutText);
+	container.add(tokensText);
+	container.add(contextText);
+
+	// Keyboard shortcuts section
+	container.add(Text({ id: "sidebar-label-keys", content: "── Keys", fg: TEXT_DIM }));
+	container.add(Text({ id: "sidebar-key-sidebar", content: "^⇧B sidebar", fg: TEXT_SECONDARY }));
+	container.add(Text({ id: "sidebar-key-esc", content: "Esc stop", fg: TEXT_SECONDARY }));
+	container.add(Text({ id: "sidebar-key-exit", content: "^C×2 exit", fg: TEXT_SECONDARY }));
+	container.add(Text({ id: "sidebar-key-hist", content: "^↑↓ history", fg: TEXT_SECONDARY }));
 
 	function onStateChange(): void {
 		const state = store.getState();
 		const turns = state.messages.filter((m) => m.role === "user").length;
-		(turnsText as unknown as { content: string }).content = `Turns: ${turns}`;
+		turnsText.content = `Turns: ${turns}`;
 
 		if (state.sessionTokens) {
-			(tokensInText as unknown as { content: string }).content = `In: ${state.sessionTokens.input}`;
-			(tokensOutText as unknown as { content: string }).content =
-				`Out: ${state.sessionTokens.output}`;
+			tokensText.content = `Tokens: ${state.sessionTokens.input}`;
+		}
+
+		if (state.contextPercentage > 0) {
+			contextText.content = `Context: ${state.contextPercentage}%`;
+			contextText.fg = state.contextPercentage >= 80 ? WARNING_YELLOW : TEXT_SECONDARY;
 		}
 	}
 
 	const unsub = store.subscribe(onStateChange);
 
 	return {
-		container: container as unknown as BoxRenderable,
+		container,
 		dispose: unsub,
 	};
 }

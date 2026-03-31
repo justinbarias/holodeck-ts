@@ -29,6 +29,12 @@ export async function processEventStream(
 				break;
 			}
 
+			case "tool_progress": {
+				// Update elapsed time without resetting the tool status
+				store.updateToolProgress(event.toolName, event.elapsedSeconds);
+				break;
+			}
+
 			case "tool_end": {
 				store.clearActiveToolCall(event.toolName, event.status, event.error);
 				break;
@@ -42,6 +48,11 @@ export async function processEventStream(
 			case "complete": {
 				if (agentMessageStarted) {
 					store.finalizeMessage();
+				}
+				// Clear any lingering tool status and status messages
+				const activeTool = store.getState().currentToolStatus;
+				if (activeTool) {
+					store.clearActiveToolCall(activeTool.toolName, "done");
 				}
 				store.setStatusMessage(null);
 				break;

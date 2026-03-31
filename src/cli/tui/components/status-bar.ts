@@ -1,4 +1,4 @@
-import { Box, type BoxRenderable, Text } from "@opentui/core";
+import { BoxRenderable, type RenderContext, TextRenderable } from "@opentui/core";
 import type { ChatStore, ToolStatus } from "../state.js";
 import {
 	ERROR_RED,
@@ -11,8 +11,6 @@ import {
 
 export interface StatusBarRefs {
 	container: BoxRenderable;
-	toolText: ReturnType<typeof Text>;
-	contextText: ReturnType<typeof Text>;
 	dispose: () => void;
 }
 
@@ -21,72 +19,72 @@ function formatElapsed(startedAt: Date): string {
 	return `${elapsed.toFixed(1)}s`;
 }
 
-export function createStatusBar(store: ChatStore): StatusBarRefs {
-	const container = Box({
-		id: "status-bar",
+export function createStatusBar(renderer: RenderContext, store: ChatStore): StatusBarRefs {
+	const container = new BoxRenderable(renderer, {
+		id: "status-bar-box",
 		width: "100%",
 		height: 1,
-		flexDirection: "row",
-		justifyContent: "space-between",
+		flexShrink: 0,
 		backgroundColor: SURFACE,
 		paddingLeft: 1,
-		paddingRight: 1,
 	});
 
-	const toolText = Text({
-		id: "status-tool",
-		content: "",
+	const bar = new TextRenderable(renderer, {
+		id: "status-bar",
+		content: " ",
 		fg: TEXT_DIM,
 	});
-
-	const contextText = Text({
-		id: "status-context",
-		content: "",
-		fg: TEXT_DIM,
-	});
-
-	container.add(toolText);
-	container.add(contextText);
+	container.add(bar);
 
 	let spinnerIndex = 0;
 	let animationTimer: ReturnType<typeof setInterval> | null = null;
 
-	function updateToolDisplay(tool: ToolStatus | null, statusMsg: string | null): void {
+	function buildContent(
+		tool: ToolStatus | null,
+		statusMsg: string | null,
+		contextPct: number,
+	): void {
+		const parts: string[] = [];
+
 		if (tool) {
 			const frame = SPINNER_FRAMES[spinnerIndex % SPINNER_FRAMES.length];
 			const elapsed = formatElapsed(tool.startedAt);
-			(toolText as unknown as { content: string }).content =
-				`${frame} Running: ${tool.toolName}  ${elapsed}`;
-			(toolText as unknown as { fg: unknown }).fg = TOOL_COLOR;
+			parts.push(`${frame} Running: ${tool.toolName}  ${elapsed}`);
+			bar.fg = TOOL_COLOR;
 		} else if (statusMsg) {
-			(toolText as unknown as { content: string }).content = statusMsg;
-			(toolText as unknown as { fg: unknown }).fg = ERROR_RED;
+			parts.push(statusMsg);
+			bar.fg = ERROR_RED;
 		} else {
-			(toolText as unknown as { content: string }).content = "";
+			bar.fg = TEXT_DIM;
 		}
-	}
 
-	function updateContextDisplay(percentage: number): void {
-		if (percentage === 0) {
-			(contextText as unknown as { content: string }).content = "";
-			return;
+		if (contextPct > 0) {
+			const contextStr = `Context: ${contextPct}%`;
+			if (parts.length > 0) {
+				// Pad to push context to right
+				parts.push(contextStr);
+				bar.content = ` ${parts.join("  ")}`;
+			} else {
+				bar.content = ` ${contextStr}`;
+			}
+			if (contextPct >= 80) bar.fg = WARNING_YELLOW;
+		} else if (parts.length > 0) {
+			bar.content = ` ${parts[0]}`;
+		} else {
+			bar.content = " ";
 		}
-		const color = percentage >= 80 ? WARNING_YELLOW : TEXT_DIM;
-		(contextText as unknown as { content: string }).content = `Context: ${percentage}%`;
-		(contextText as unknown as { fg: unknown }).fg = color;
 	}
 
 	function onStateChange(): void {
 		const s = store.getState();
-		updateToolDisplay(s.currentToolStatus, s.statusMessage);
-		updateContextDisplay(s.contextPercentage);
+		buildContent(s.currentToolStatus, s.statusMessage, s.contextPercentage);
 
 		if (s.currentToolStatus && !animationTimer) {
 			animationTimer = setInterval(() => {
 				spinnerIndex++;
-				const tool = store.getState().currentToolStatus;
-				if (tool) {
-					updateToolDisplay(tool, null);
+				const s2 = store.getState();
+				if (s2.currentToolStatus) {
+					buildContent(s2.currentToolStatus, s2.statusMessage, s2.contextPercentage);
 				}
 			}, 80);
 		} else if (!s.currentToolStatus && animationTimer) {
@@ -106,9 +104,7 @@ export function createStatusBar(store: ChatStore): StatusBarRefs {
 	}
 
 	return {
-		container: container as unknown as BoxRenderable,
-		toolText,
-		contextText,
+		container,
 		dispose,
 	};
 }

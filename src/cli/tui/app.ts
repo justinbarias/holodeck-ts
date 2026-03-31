@@ -1,5 +1,5 @@
 // src/cli/tui/app.ts
-import { Box, createCliRenderer, type KeyEvent } from "@opentui/core";
+import { BoxRenderable, createCliRenderer, type KeyEvent } from "@opentui/core";
 import type { ChatSession } from "../../agent/session.js";
 import { closeSession, interruptResponse, sendMessage } from "../../agent/session.js";
 import type { AgentConfig } from "../../config/schema.js";
@@ -31,9 +31,9 @@ export async function launchTUI(session: ChatSession, config: AgentConfig): Prom
 	});
 
 	// Create components
-	const sidebar = createSidebar(store);
+	const sidebar = createSidebar(renderer, store);
 	const chatHistory = createChatHistory(renderer, store);
-	const statusBar = createStatusBar(store);
+	const statusBar = createStatusBar(renderer, store);
 	const inputBar = createInputBar(renderer, {
 		onSubmit: (text) => handleSubmit(text),
 	});
@@ -47,17 +47,18 @@ export async function launchTUI(session: ChatSession, config: AgentConfig): Prom
 	// |          | input-bar                    |
 	// +----------+-----------------------------+
 
-	const mainColumn = Box({
+	const mainColumn = new BoxRenderable(renderer, {
 		id: "main-column",
 		flexGrow: 1,
 		flexDirection: "column",
 		height: "100%",
+		overflow: "hidden",
 	});
 	mainColumn.add(chatHistory.scrollBox);
 	mainColumn.add(statusBar.container);
 	mainColumn.add(inputBar.container);
 
-	const rootLayout = Box({
+	const rootLayout = new BoxRenderable(renderer, {
 		id: "root-layout",
 		width: "100%",
 		height: "100%",
@@ -75,11 +76,10 @@ export async function launchTUI(session: ChatSession, config: AgentConfig): Prom
 	let lastSigintTime = 0;
 
 	renderer.keyInput.on("keypress", (key: KeyEvent) => {
-		// Ctrl+B: toggle sidebar
-		if (key.ctrl && key.name === "b") {
+		// Ctrl+Shift+B: toggle sidebar (Ctrl+B is consumed by textarea as cursor-left)
+		if (key.ctrl && key.shift && key.name === "b") {
 			store.toggleSidebar();
-			const s = store.getState();
-			(sidebar.container as unknown as { visible: boolean }).visible = s.sidebarVisible;
+			sidebar.container.visible = store.getState().sidebarVisible;
 			return;
 		}
 
@@ -109,21 +109,23 @@ export async function launchTUI(session: ChatSession, config: AgentConfig): Prom
 			store.setStatusMessage("Press Ctrl+C again to exit");
 			return;
 		}
-
-		// Ctrl+Up/Down: history navigation (only when not streaming)
-		if (!store.getState().isStreaming && inputBar.textarea.focused) {
-			if (key.name === "up" && key.ctrl) {
-				const prev = store.navigateHistory("up");
-				if (prev.length > 0) setInputValue(inputBar, prev);
-				return;
-			}
-			if (key.name === "down" && key.ctrl) {
-				const next = store.navigateHistory("down");
-				setInputValue(inputBar, next);
-				return;
-			}
-		}
 	});
+
+	// History navigation via textarea's onKeyDown (arrow keys are consumed by textarea
+	// before reaching the global keypress handler)
+	inputBar.textarea.onKeyDown = (key: KeyEvent) => {
+		if (store.getState().isStreaming) return;
+
+		if (key.name === "up") {
+			const prev = store.navigateHistory("up");
+			if (prev.length > 0) setInputValue(inputBar, prev);
+			return;
+		}
+		if (key.name === "down") {
+			const next = store.navigateHistory("down");
+			setInputValue(inputBar, next);
+		}
+	};
 
 	// Submit handler
 	async function handleSubmit(text: string): Promise<void> {
@@ -135,9 +137,10 @@ export async function launchTUI(session: ChatSession, config: AgentConfig): Prom
 			const eventStream = sendMessage(session, text);
 			const result = await processEventStream(eventStream, store);
 
-			// Update token counts from session
+			// Update token/context counts from session
 			if (session.contextUsage) {
 				store.updateContextPercentage(Math.round(session.contextUsage.percentage));
+				store.updateSessionTokens(session.contextUsage.totalTokens, 0);
 			}
 
 			if (result.shouldAbort) {

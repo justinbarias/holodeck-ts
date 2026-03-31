@@ -3,6 +3,7 @@ import type {
 	SDKMessage,
 	SDKPartialAssistantMessage,
 	SDKResultMessage,
+	SDKToolProgressMessage,
 	SDKToolUseSummaryMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 
@@ -30,6 +31,7 @@ type SystemSubtypeMessage =
 export type ChatEvent =
 	| { type: "text"; content: string }
 	| { type: "tool_start"; toolName: string }
+	| { type: "tool_progress"; toolName: string; elapsedSeconds: number }
 	| { type: "tool_end"; toolName: string; status: "done" | "failed"; error?: string }
 	| { type: "thinking"; content: string }
 	| { type: "context_warning"; ratio: number }
@@ -79,7 +81,17 @@ function mapStreamEvent(message: SDKPartialAssistantMessage): ChatEvent | null {
 	const record = event as {
 		type?: string;
 		delta?: { type?: string; text?: string; thinking?: string };
+		content_block?: { type?: string; name?: string };
 	};
+
+	// Detect tool_use start from content_block_start events
+	if (
+		record.type === "content_block_start" &&
+		record.content_block?.type === "tool_use" &&
+		typeof record.content_block.name === "string"
+	) {
+		return { type: "tool_start", toolName: record.content_block.name };
+	}
 
 	if (record.type === "content_block_delta" && record.delta) {
 		const delta = record.delta;
@@ -99,22 +111,33 @@ function mapStreamEvent(message: SDKPartialAssistantMessage): ChatEvent | null {
 	return null;
 }
 
+function mapToolProgress(message: SDKToolProgressMessage): ChatEvent {
+	return {
+		type: "tool_progress",
+		toolName: message.tool_name,
+		elapsedSeconds: message.elapsed_time_seconds,
+	};
+}
+
 function parseToolSummary(message: SDKToolUseSummaryMessage): ChatEvent {
 	const summary = message.summary.trim();
 
-	const startMatch = summary.match(/^Calling\s+([0-9A-Za-z_]+)\.\.\.$/);
+	// Match "Calling toolName..." with optional arguments like "Calling Read("file.ts")..."
+	const startMatch = summary.match(/^Calling\s+([0-9A-Za-z_]+)/);
 	const startTool = startMatch?.[1];
-	if (startTool) {
+	if (startTool && summary.includes("...")) {
 		return { type: "tool_start", toolName: startTool };
 	}
 
-	const doneMatch = summary.match(/^([0-9A-Za-z_]+)\s+done$/);
+	// Match "toolName done" or "toolName done (with details)"
+	const doneMatch = summary.match(/^([0-9A-Za-z_]+)\s+done/);
 	const doneTool = doneMatch?.[1];
 	if (doneTool) {
 		return { type: "tool_end", toolName: doneTool, status: "done" };
 	}
 
-	const failedMatch = summary.match(/^([0-9A-Za-z_]+)\s+failed(?::\s+(.+))?$/);
+	// Match "toolName failed" with optional error details
+	const failedMatch = summary.match(/^([0-9A-Za-z_]+)\s+failed(?::\s+(.+))?/);
 	const failedTool = failedMatch?.[1];
 	if (failedTool) {
 		return {
@@ -246,6 +269,10 @@ export async function* mapSDKMessages(
 				yield* mapAssistantMessage(message);
 				break;
 			}
+
+			case "tool_progress":
+				yield mapToolProgress(message as SDKToolProgressMessage);
+				break;
 
 			case "tool_use_summary":
 				yield parseToolSummary(message);

@@ -18,7 +18,10 @@ export function createChatHistory(renderer: RenderContext, store: ChatStore): Ch
 	const scrollBox = new ScrollBoxRenderable(renderer, {
 		id: "chat-history",
 		flexGrow: 1,
+		flexShrink: 1,
+		height: 0,
 		width: "100%",
+		overflow: "scroll",
 		stickyScroll: true,
 		stickyStart: "bottom",
 		backgroundColor: DARK_BG,
@@ -27,6 +30,8 @@ export function createChatHistory(renderer: RenderContext, store: ChatStore): Ch
 
 	const bubbleMap = new Map<string, MessageBubbleRefs>();
 	let previousMessageCount = 0;
+
+	const finalizedIds = new Set<string>();
 
 	function onStateChange(): void {
 		const state = store.getState();
@@ -51,12 +56,13 @@ export function createChatHistory(renderer: RenderContext, store: ChatStore): Ch
 			}
 		}
 
-		// Finalize completed messages (swap Text → Markdown)
+		// Finalize completed messages (set streaming=false on MarkdownRenderable)
 		for (const msg of messages) {
-			if (!msg.isStreaming) {
+			if (!msg.isStreaming && !finalizedIds.has(msg.id)) {
 				const bubble = bubbleMap.get(msg.id);
-				if (bubble?.contentText) {
-					finalizeBubble(renderer, bubble, msg);
+				if (bubble) {
+					finalizeBubble(bubble);
+					finalizedIds.add(msg.id);
 				}
 			}
 		}
