@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -75,6 +75,35 @@ describe("cli/chat command", () => {
 		expect(FAREWELL_MESSAGE).toBe("Goodbye!");
 	});
 
+	describe("formatRuntimeErrorMessage auth detection", () => {
+		it("detects 'authentication failed' (with space)", () => {
+			const msg = formatRuntimeErrorMessage("authentication failed for user");
+			expect(msg).toContain("Authentication failed");
+			expect(msg).toContain("ANTHROPIC_API_KEY");
+		});
+
+		it("detects 'invalid api key'", () => {
+			const msg = formatRuntimeErrorMessage("Error: invalid api key provided");
+			expect(msg).toContain("Authentication failed");
+		});
+
+		it("detects 'unauthorized'", () => {
+			const msg = formatRuntimeErrorMessage("401 Unauthorized");
+			expect(msg).toContain("Authentication failed");
+		});
+
+		it("detects compound 'api key' + 'invalid'", () => {
+			const msg = formatRuntimeErrorMessage("The api key you provided is invalid");
+			expect(msg).toContain("Authentication failed");
+		});
+
+		it("does not false-positive on unrelated errors", () => {
+			const msg = formatRuntimeErrorMessage("Rate limit exceeded");
+			expect(msg).toBe("Error: Rate limit exceeded\n");
+			expect(msg).not.toContain("Authentication");
+		});
+	});
+
 	// T084: Exit code tests
 	describe("exit codes", () => {
 		it("config error sets exit code 1", async () => {
@@ -91,17 +120,77 @@ describe("cli/chat command", () => {
 			rmSync(tempDir, { recursive: true, force: true });
 		});
 
+		it("non-default agent path config error shows raw error message", async () => {
+			const tempDir = mkdtempSync(join(tmpdir(), "holodeck-nondefault-"));
+			process.chdir(tempDir);
+
+			const stderrSpy = spyOn(process.stderr, "write");
+			await runChatCommand({ agent: "./custom/agent.yaml", verbose: false });
+
+			const stderr = stderrSpy.mock.calls.map((call) => String(call[0])).join("");
+			// Should NOT show "No agent configuration found" — that's only for default path
+			expect(stderr).not.toContain("No agent configuration found");
+			expect(process.exitCode).toBe(1);
+
+			rmSync(tempDir, { recursive: true, force: true });
+		});
+
 		it("formatRuntimeErrorMessage produces correct format for non-auth errors", () => {
 			const msg = formatRuntimeErrorMessage("Connection refused");
 			expect(msg).toBe("Error: Connection refused\n");
 		});
 
 		it("TUI cleanup uses process.exitCode ?? 0 for clean exit", async () => {
-			// Verify the contract: when no error occurred, exitCode defaults to 0
-			// The TUI cleanup function calls process.exit(process.exitCode ?? 0)
-			// We verify the default exitCode is undefined/0 before any error
 			process.exitCode = undefined;
 			expect(process.exitCode ?? 0).toBe(0);
+		});
+	});
+
+	describe("runChatCommand config validation error", () => {
+		it("shows validation error for invalid YAML content", async () => {
+			const tempDir = mkdtempSync(join(tmpdir(), "holodeck-invalid-"));
+			process.chdir(tempDir);
+			writeFileSync(join(tempDir, "agent.yaml"), "name: test\n");
+
+			const stderrSpy = spyOn(process.stderr, "write");
+			await runChatCommand({ agent: "./agent.yaml", verbose: false });
+
+			const stderr = stderrSpy.mock.calls.map((call) => String(call[0])).join("");
+			// Should show the validation error, not the "not found" message
+			expect(stderr).not.toContain("No agent configuration found");
+			expect(process.exitCode).toBe(1);
+
+			rmSync(tempDir, { recursive: true, force: true });
+		});
+	});
+
+	describe("runChatCommand path resolution", () => {
+		it("uses default agent path when agent option is empty string", async () => {
+			const tempDir = mkdtempSync(join(tmpdir(), "holodeck-empty-"));
+			process.chdir(tempDir);
+
+			const stderrSpy = spyOn(process.stderr, "write");
+			await runChatCommand({ agent: "", verbose: false });
+
+			const stderr = stderrSpy.mock.calls.map((call) => String(call[0])).join("");
+			expect(stderr).toContain("No agent configuration found");
+			expect(process.exitCode).toBe(1);
+
+			rmSync(tempDir, { recursive: true, force: true });
+		});
+
+		it("uses default agent path when agent option is whitespace", async () => {
+			const tempDir = mkdtempSync(join(tmpdir(), "holodeck-ws-"));
+			process.chdir(tempDir);
+
+			const stderrSpy = spyOn(process.stderr, "write");
+			await runChatCommand({ agent: "  ", verbose: false });
+
+			const stderr = stderrSpy.mock.calls.map((call) => String(call[0])).join("");
+			expect(stderr).toContain("No agent configuration found");
+			expect(process.exitCode).toBe(1);
+
+			rmSync(tempDir, { recursive: true, force: true });
 		});
 	});
 });

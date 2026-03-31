@@ -14,7 +14,7 @@ export interface StatusBarRefs {
 	dispose: () => void;
 }
 
-function formatElapsed(startedAt: Date): string {
+export function formatElapsed(startedAt: Date): string {
 	const elapsed = (Date.now() - startedAt.getTime()) / 1000;
 	return `${elapsed.toFixed(1)}s`;
 }
