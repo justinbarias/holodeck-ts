@@ -62,7 +62,7 @@ function buildQueryOptions(session: ChatSession): Options {
 		includePartialMessages: true,
 		thinking: mapThinkingConfig(claude?.extended_thinking),
 		hooks: buildHooks(session),
-		settingSources: [],
+		settingSources: claude?.setting_sources ?? ["project"],
 	};
 }
 
