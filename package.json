@@ -21,11 +21,13 @@
 	],
 	"scripts": {
 		"dev": "bun src/cli/index.ts",
+		"dev:chat": "bash scripts/dev-chat.sh --agent ./sample/research-agent/agent.yaml",
 		"build": "bun run build:clean && bun run build:js && bun run build:types",
 		"build:clean": "rm -rf dist",
 		"build:js": "bun build src/index.ts src/cli/index.ts --outdir dist --target node --format esm --splitting",
 		"build:types": "tsc -p tsconfig.build.json --emitDeclarationOnly",
 		"test": "bun test",
+		"test:integration": "bun test tests/integration",
 		"lint": "biome check .",
 		"lint:fix": "biome check --fix .",
 		"format": "biome format --write .",
@@ -59,6 +61,7 @@
 	"dependencies": {
 		"@anthropic-ai/claude-agent-sdk": "0.2.87",
 		"@logtape/logtape": "^2.0.5",
+		"@opentui/core": "^0.1.93",
 		"commander": "^14.0.3",
 		"marked": "15.0.12",
 		"marked-terminal": "^7.3.0",
