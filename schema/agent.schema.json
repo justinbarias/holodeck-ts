@@ -1,0 +1,502 @@
+{
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"$id": "https://holodeck.dev/schema/agent.schema.json",
+	"title": "HoloDeck Agent Configuration",
+	"description": "Configuration schema for HoloDeck AI agents. Defines agent behavior, model settings, tools, and Claude Agent SDK options.",
+	"type": "object",
+	"required": ["name", "model", "instructions"],
+	"additionalProperties": false,
+	"properties": {
+		"name": {
+			"type": "string",
+			"minLength": 1,
+			"maxLength": 100,
+			"description": "Agent identifier."
+		},
+		"description": {
+			"type": "string",
+			"maxLength": 500,
+			"description": "Human-readable description of the agent."
+		},
+		"model": {
+			"$ref": "#/$defs/LLMProvider"
+		},
+		"instructions": {
+			"$ref": "#/$defs/Instructions"
+		},
+		"tools": {
+			"type": "array",
+			"maxItems": 50,
+			"default": [],
+			"description": "Tools available to the agent. Max 50. Names must be unique.",
+			"items": {
+				"$ref": "#/$defs/Tool"
+			}
+		},
+		"claude": {
+			"$ref": "#/$defs/ClaudeConfig"
+		}
+	},
+	"$defs": {
+		"LLMProvider": {
+			"type": "object",
+			"description": "LLM model configuration.",
+			"required": ["provider", "name"],
+			"additionalProperties": false,
+			"properties": {
+				"provider": {
+					"type": "string",
+					"const": "anthropic",
+					"description": "Only 'anthropic' is supported."
+				},
+				"name": {
+					"type": "string",
+					"minLength": 1,
+					"description": "Model name (e.g. claude-sonnet-4-6, claude-opus-4-6)."
+				},
+				"temperature": {
+					"type": "number",
+					"minimum": 0,
+					"maximum": 2,
+					"default": 0.3,
+					"description": "Sampling temperature. 0 = deterministic, 2 = max randomness."
+				},
+				"max_tokens": {
+					"type": "integer",
+					"exclusiveMinimum": 0,
+					"default": 1000,
+					"description": "Maximum tokens in the response."
+				},
+				"auth_provider": {
+					"type": "string",
+					"enum": ["api_key", "bedrock", "vertex", "foundry"],
+					"description": "Authentication provider."
+				}
+			}
+		},
+		"Instructions": {
+			"type": "object",
+			"description": "Agent system instructions. Exactly one of 'inline' or 'file' must be provided.",
+			"additionalProperties": false,
+			"oneOf": [
+				{
+					"required": ["inline"],
+					"not": { "required": ["file"] },
+					"properties": {
+						"inline": {
+							"type": "string",
+							"minLength": 1,
+							"description": "Inline system prompt text."
+						},
+						"file": false
+					}
+				},
+				{
+					"required": ["file"],
+					"not": { "required": ["inline"] },
+					"properties": {
+						"file": {
+							"type": "string",
+							"minLength": 1,
+							"description": "Path to a file containing the system prompt."
+						},
+						"inline": false
+					}
+				}
+			],
+			"properties": {
+				"inline": {
+					"type": "string",
+					"minLength": 1,
+					"description": "Inline system prompt text."
+				},
+				"file": {
+					"type": "string",
+					"minLength": 1,
+					"description": "Path to a file containing the system prompt."
+				}
+			}
+		},
+		"Tool": {
+			"description": "Tool configuration. Discriminated by 'type' field.",
+			"oneOf": [
+				{ "$ref": "#/$defs/HierarchicalDocumentTool" },
+				{ "$ref": "#/$defs/MCPStdioTool" },
+				{ "$ref": "#/$defs/MCPHttpTool" }
+			]
+		},
+		"HierarchicalDocumentTool": {
+			"type": "object",
+			"description": "Hierarchical vectorstore tool with contextual retrieval.",
+			"required": ["type", "name", "description", "source"],
+			"additionalProperties": false,
+			"properties": {
+				"type": {
+					"type": "string",
+					"const": "hierarchical_document"
+				},
+				"name": {
+					"type": "string",
+					"pattern": "^[0-9A-Za-z_]+$",
+					"description": "Tool name. Alphanumeric and underscores only."
+				},
+				"description": {
+					"type": "string",
+					"minLength": 1,
+					"description": "Tool description shown to the agent."
+				},
+				"source": {
+					"type": "string",
+					"minLength": 1,
+					"description": "Path to markdown file, directory, or glob pattern."
+				},
+				"chunking_strategy": {
+					"type": "string",
+					"enum": ["structure", "token"],
+					"default": "structure",
+					"description": "How to split documents into chunks."
+				},
+				"max_chunk_tokens": {
+					"type": "integer",
+					"minimum": 100,
+					"maximum": 2000,
+					"default": 800,
+					"description": "Maximum tokens per chunk."
+				},
+				"chunk_overlap": {
+					"type": "integer",
+					"minimum": 0,
+					"maximum": 200,
+					"default": 50,
+					"description": "Token overlap between adjacent chunks."
+				},
+				"search_mode": {
+					"type": "string",
+					"enum": ["semantic", "keyword", "exact", "hybrid"],
+					"default": "hybrid",
+					"description": "Search strategy. In hybrid mode, weights must sum to 1.0."
+				},
+				"top_k": {
+					"type": "integer",
+					"minimum": 1,
+					"maximum": 100,
+					"default": 10,
+					"description": "Number of results to return."
+				},
+				"min_score": {
+					"type": "number",
+					"minimum": 0,
+					"maximum": 1,
+					"description": "Minimum similarity score threshold."
+				},
+				"semantic_weight": {
+					"type": "number",
+					"minimum": 0,
+					"maximum": 1,
+					"default": 0.5,
+					"description": "Weight for semantic search in hybrid mode. Weights must sum to 1.0."
+				},
+				"keyword_weight": {
+					"type": "number",
+					"minimum": 0,
+					"maximum": 1,
+					"default": 0.3,
+					"description": "Weight for keyword search in hybrid mode. Weights must sum to 1.0."
+				},
+				"exact_weight": {
+					"type": "number",
+					"minimum": 0,
+					"maximum": 1,
+					"default": 0.2,
+					"description": "Weight for exact match in hybrid mode. Weights must sum to 1.0."
+				},
+				"contextual_embeddings": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable Anthropic contextual retrieval (enrich chunks with document context before embedding)."
+				},
+				"context_max_tokens": {
+					"type": "integer",
+					"minimum": 50,
+					"maximum": 200,
+					"default": 100,
+					"description": "Maximum tokens for contextual embedding prefix."
+				},
+				"context_concurrency": {
+					"type": "integer",
+					"minimum": 1,
+					"maximum": 50,
+					"default": 10,
+					"description": "Parallel contextualization requests."
+				},
+				"database": {
+					"$ref": "#/$defs/Database",
+					"default": { "provider": "in-memory" }
+				}
+			}
+		},
+		"MCPStdioTool": {
+			"type": "object",
+			"description": "MCP server tool using stdio transport.",
+			"required": ["type", "name", "description", "command"],
+			"additionalProperties": false,
+			"properties": {
+				"type": {
+					"type": "string",
+					"const": "mcp"
+				},
+				"name": {
+					"type": "string",
+					"pattern": "^[0-9A-Za-z_]+$",
+					"description": "Tool name. Alphanumeric and underscores only."
+				},
+				"description": {
+					"type": "string",
+					"minLength": 1,
+					"description": "Tool description shown to the agent."
+				},
+				"transport": {
+					"type": "string",
+					"const": "stdio",
+					"default": "stdio",
+					"description": "Transport protocol."
+				},
+				"command": {
+					"type": "string",
+					"enum": ["npx", "node", "docker"],
+					"description": "Command to launch the MCP server."
+				},
+				"args": {
+					"type": "array",
+					"items": { "type": "string" },
+					"default": [],
+					"description": "Command arguments."
+				},
+				"env": {
+					"type": "object",
+					"additionalProperties": { "type": "string" },
+					"default": {},
+					"description": "Environment variables for the MCP server process."
+				},
+				"request_timeout": {
+					"type": "number",
+					"exclusiveMinimum": 0,
+					"default": 60,
+					"description": "Request timeout in seconds."
+				}
+			}
+		},
+		"MCPHttpTool": {
+			"type": "object",
+			"description": "MCP server tool using HTTP or SSE transport.",
+			"required": ["type", "name", "description", "transport", "url"],
+			"additionalProperties": false,
+			"properties": {
+				"type": {
+					"type": "string",
+					"const": "mcp"
+				},
+				"name": {
+					"type": "string",
+					"pattern": "^[0-9A-Za-z_]+$",
+					"description": "Tool name. Alphanumeric and underscores only."
+				},
+				"description": {
+					"type": "string",
+					"minLength": 1,
+					"description": "Tool description shown to the agent."
+				},
+				"transport": {
+					"type": "string",
+					"enum": ["sse", "http"],
+					"description": "Transport protocol."
+				},
+				"url": {
+					"type": "string",
+					"format": "uri",
+					"description": "URL of the MCP server."
+				},
+				"headers": {
+					"type": "object",
+					"additionalProperties": { "type": "string" },
+					"default": {},
+					"description": "HTTP headers for requests."
+				},
+				"request_timeout": {
+					"type": "number",
+					"exclusiveMinimum": 0,
+					"default": 60,
+					"description": "Request timeout in seconds."
+				}
+			}
+		},
+		"Database": {
+			"description": "Vector database configuration.",
+			"oneOf": [
+				{
+					"type": "object",
+					"required": ["provider"],
+					"additionalProperties": false,
+					"properties": {
+						"provider": {
+							"type": "string",
+							"const": "in-memory",
+							"description": "In-memory vector store (no persistence)."
+						}
+					}
+				},
+				{
+					"type": "object",
+					"required": ["provider", "connection_string"],
+					"additionalProperties": false,
+					"properties": {
+						"provider": {
+							"type": "string",
+							"enum": ["postgres", "redis", "chromadb"],
+							"description": "External vector database provider."
+						},
+						"connection_string": {
+							"type": "string",
+							"minLength": 1,
+							"description": "Database connection string."
+						}
+					}
+				}
+			]
+		},
+		"ClaudeConfig": {
+			"type": "object",
+			"description": "Claude Agent SDK settings.",
+			"additionalProperties": false,
+			"properties": {
+				"working_directory": {
+					"type": "string",
+					"description": "Working directory for file access and subprocess cwd."
+				},
+				"permission_mode": {
+					"type": "string",
+					"enum": ["manual", "acceptEdits", "acceptAll"],
+					"default": "manual",
+					"description": "Tool permission mode. 'manual' requires user approval, 'acceptAll' bypasses permissions."
+				},
+				"max_turns": {
+					"type": "integer",
+					"exclusiveMinimum": 0,
+					"description": "Maximum agent loop iterations."
+				},
+				"extended_thinking": {
+					"$ref": "#/$defs/ExtendedThinking"
+				},
+				"web_search": {
+					"type": "boolean",
+					"default": false,
+					"description": "Enable built-in web search tool."
+				},
+				"bash": {
+					"$ref": "#/$defs/BashConfig"
+				},
+				"file_system": {
+					"$ref": "#/$defs/FileSystemConfig"
+				},
+				"subagents": {
+					"$ref": "#/$defs/SubagentsConfig"
+				},
+				"allowed_tools": {
+					"description": "Explicit tool allowlist. null = all tools allowed.",
+					"oneOf": [
+						{
+							"type": "array",
+							"items": { "type": "string" }
+						},
+						{
+							"type": "null"
+						}
+					],
+					"default": null
+				}
+			}
+		},
+		"ExtendedThinking": {
+			"type": "object",
+			"description": "Extended thinking (chain-of-thought) configuration.",
+			"required": ["enabled"],
+			"additionalProperties": false,
+			"properties": {
+				"enabled": {
+					"type": "boolean",
+					"description": "Enable extended thinking."
+				},
+				"budget_tokens": {
+					"type": "integer",
+					"minimum": 1000,
+					"maximum": 100000,
+					"description": "Token budget for thinking. Only applies when enabled."
+				}
+			}
+		},
+		"BashConfig": {
+			"type": "object",
+			"description": "Bash tool configuration.",
+			"additionalProperties": false,
+			"properties": {
+				"enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable bash tool."
+				},
+				"excluded_commands": {
+					"type": "array",
+					"items": { "type": "string" },
+					"default": [],
+					"description": "Commands the agent is not allowed to run."
+				},
+				"allow_unsafe": {
+					"type": "boolean",
+					"default": false,
+					"description": "Allow potentially dangerous commands."
+				}
+			}
+		},
+		"FileSystemConfig": {
+			"type": "object",
+			"description": "File system access configuration.",
+			"additionalProperties": false,
+			"properties": {
+				"read": {
+					"type": "boolean",
+					"default": true,
+					"description": "Allow file reading."
+				},
+				"write": {
+					"type": "boolean",
+					"default": true,
+					"description": "Allow file writing."
+				},
+				"edit": {
+					"type": "boolean",
+					"default": true,
+					"description": "Allow file editing."
+				}
+			}
+		},
+		"SubagentsConfig": {
+			"type": "object",
+			"description": "Sub-agent configuration.",
+			"required": ["enabled"],
+			"additionalProperties": false,
+			"properties": {
+				"enabled": {
+					"type": "boolean",
+					"description": "Enable sub-agents."
+				},
+				"max_parallel": {
+					"type": "integer",
+					"minimum": 1,
+					"maximum": 16,
+					"default": 4,
+					"description": "Maximum parallel sub-agents."
+				}
+			}
+		}
+	}
+}
