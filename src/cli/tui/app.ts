@@ -121,6 +121,10 @@ export async function launchTUI(session: ChatSession, config: AgentConfig): Prom
 
 		// Ctrl+C: interrupt if streaming, double-tap to exit
 		if (key.ctrl && key.name === "c") {
+			if (session.state === "shutting_down" || session.state === "exited") {
+				return;
+			}
+
 			const now = Date.now();
 			if (store.getState().isStreaming) {
 				void interruptResponse(session);

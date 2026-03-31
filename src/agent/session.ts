@@ -231,17 +231,25 @@ export async function* sendMessage(session: ChatSession, input: string): AsyncGe
 }
 
 export async function closeSession(session: ChatSession): Promise<void> {
-	if (session.state === "exited") {
+	if (session.state === "exited" || session.state === "shutting_down") {
 		return;
 	}
 
 	session.state = "shutting_down";
 	sessionLogger.info("Closing chat session.");
 
-	if (session.query) {
-		session.query.close();
+	try {
+		if (session.query) {
+			session.query.close();
+			session.query = null;
+		}
+	} catch (error) {
+		sessionLogger.error("Error closing query during session shutdown: {error}", {
+			error: toErrorMessage(error),
+		});
 		session.query = null;
 	}
 
 	session.state = "exited";
+	sessionLogger.info("Session closed.", { sessionId: session.sessionId, state: "exited" });
 }

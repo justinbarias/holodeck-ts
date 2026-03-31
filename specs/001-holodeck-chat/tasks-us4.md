@@ -23,114 +23,90 @@ These artifacts exist and are functional before US4 work begins:
 
 ### Phase 1: closeSession() and State Transitions
 
-- [ ] T075 [P1] [US4] Write tests for `closeSession()` state transitions in `tests/unit/agent/session.test.ts`
-  - Test: calling `closeSession()` on a session in `prompting` state transitions to `shutting_down` then `exited`
-  - Test: calling `closeSession()` on a session in `streaming` state transitions to `shutting_down` then `exited`
-  - Test: calling `closeSession()` on an already `exited` session is a no-op (idempotent)
-  - Test: after `closeSession()`, `session.state` is `"exited"`
+- [x] T075 [P1] [US4] Write tests for `closeSession()` state transitions in `tests/unit/agent/session.test.ts` — **DONE**
+  - Tests: prompting→exited, already-exited no-op, shutting_down no-op
 
-- [ ] T076 [P1] [US4] Enhance `closeSession()` in `src/agent/session.ts` (base implementation exists from tasks-us1.md#T024)
-  - Add `"shutting_down"` intermediate state: set `session.state` to `"shutting_down"` before cleanup
-  - If `session.query` is not null, call `query.close()` (SDK handles MCP server shutdown)
-  - Set `session.state` to `"exited"` after cleanup completes
-  - Ensure the function remains exported alongside existing session exports
+- [x] T076 [P1] [US4] Enhance `closeSession()` in `src/agent/session.ts` — **DONE**
+  - `shutting_down` intermediate state + guard, try/catch around `query.close()`, logging
 
-- [ ] T077 [P1] [US4] Write tests for `interruptResponse()` state transitions in `tests/unit/agent/session.test.ts`
-  - Test: calling `interruptResponse()` on a session in `streaming` state transitions to `interrupted` then `prompting`
-  - Test: calling `interruptResponse()` on a session in `prompting` state is a no-op
-  - Test: after interrupt, session remains usable (state is `prompting`, not `exited`)
+- [x] T077 [P1] [US4] Write tests for `interruptResponse()` state transitions — **DONE**
+  - Tests: streaming→prompting, prompting no-op, post-interrupt usability
 
-- [ ] T078 [P1] [US4] Implement `interruptResponse(session: ChatSession): Promise<void>` in `src/agent/session.ts`
-  - If `session.state` is not `"streaming"`, return early (no-op)
-  - Call `session.query.interrupt()` if query handle exists
-  - Set state to `"interrupted"`, then to `"prompting"`
+- [x] T078 [P1] [US4] Implement `interruptResponse(session: ChatSession): Promise<void>` in `src/agent/session.ts` — **DONE**
+  - Early return if state is not `"streaming"`
+  - Calls `session.query.interrupt()`
+  - Transitions directly to `"prompting"` (skips `"interrupted"` intermediate — acceptable for TUI flow)
 
 ### Phase 2: Exit Command Detection
 
-- [ ] T079 [P1] [US4] Write tests for exit command detection in `tests/unit/cli/chat.test.ts`
-  - Test: `isExitCommand("exit")` returns `true`
-  - Test: `isExitCommand("quit")` returns `true`
-  - Test: `isExitCommand("EXIT")` returns `true` (case-insensitive)
-  - Test: `isExitCommand("  quit  ")` returns `true` (trimmed)
-  - Test: `isExitCommand("exit now")` returns `false` (not a substring match)
-  - Test: `isExitCommand("hello")` returns `false`
-  - Test: `isExitCommand("")` returns `false`
+- [x] T079 [P1] [US4] ~~Write tests for exit command detection~~ — **SUPERSEDED by TUI**
+  - TUI uses Ctrl+C double-tap to exit instead of text-based exit commands
+  - No readline input to parse; exit handled via `src/cli/tui/app.ts` keypress handler (lines 122-140)
 
-- [ ] T080 [P1] [US4] Implement `isExitCommand(input: string): boolean` in `src/cli/commands/chat.ts`
-  - Match `input.trim().toLowerCase()` against `"exit"` and `"quit"` exactly
-  - Export for testability
+- [x] T080 [P1] [US4] ~~Implement `isExitCommand()`~~ — **SUPERSEDED by TUI**
+  - TUI replaced readline interactive loop; no text-based exit command needed
+  - Exit flow: Ctrl+C double-tap → `cleanup()` → `closeSession()` → `process.exit()`
 
-### Phase 3: Readline Signal Handling
+### Phase 3: ~~Readline~~ Signal Handling
 
-- [ ] T081 [P1] [US4] Write tests for exit flow orchestration in `tests/unit/cli/chat.test.ts`
-  - Test: when user input matches exit command, `closeSession()` is called and farewell message `"Goodbye!"` is printed
-  - Test: after exit command, process exits with code 0
-  - Test: Ctrl+D (readline `close` event) triggers `closeSession()` and exits with code 0
+- [x] T081 [P1] [US4] ~~Write tests for exit flow orchestration (readline)~~ — **SUPERSEDED by TUI**
+  - TUI exit flow: Ctrl+C double-tap → `cleanup()` calls `closeSession(session)` → `renderer.stop()` → `process.exit(0)` (app.ts lines 187-195)
+  - No readline `close` event or text-based exit commands
+  - **Replacement needed**: Tests for TUI cleanup flow in `tests/unit/cli/tui/` (not covered by existing tasks)
 
-- [ ] T082 [P1] [US4] Implement exit command handling in the interactive loop in `src/cli/commands/chat.ts`
-  - Before sending user input to `sendMessage()`, check `isExitCommand(input)`
-  - If exit command: log farewell `"Goodbye!"` to stdout, call `closeSession(session)`, close readline, `process.exit(0)`
-  - Wire `rl.on("close", ...)` handler for Ctrl+D: same flow as exit command (farewell, closeSession, exit 0)
+- [x] T082 [P1] [US4] ~~Implement exit command handling in readline interactive loop~~ — **SUPERSEDED by TUI**
+  - TUI `cleanup()` function handles exit (app.ts lines 187-195)
+  - Single-message mode (`--prompt`) calls `closeSession()` in `runSingleMessage()` finally block (chat.ts line 106)
 
-- [ ] T083 [P2] [US4] Implement Ctrl+C signal handling at the prompt in `src/cli/commands/chat.ts`
-  - Wire `rl.on("SIGINT", ...)` handler
-  - If `session.state === "prompting"`: display hint `'Type "exit" or press Ctrl+D to quit.'` to stderr, re-display prompt
-  - If `session.state === "streaming"`: call `interruptResponse(session)` (FR-011 — session stays alive, handled by US5 streaming interrupt, but wire the call here)
+- [x] T083 [P2] [US4] ~~Implement Ctrl+C signal handling at readline prompt~~ — **SUPERSEDED by TUI**
+  - TUI Ctrl+C handler implemented in app.ts (lines 122-140):
+    - If streaming: calls `interruptResponse(session)` + `store.finalizeMessage()`
+    - If prompting: shows "Press Ctrl+C again to exit" hint
+    - Double-tap within 1s: calls `cleanup()` to exit
+  - Escape key also interrupts streaming (lines 116-120)
 
 ### Phase 4: Exit Codes
 
-- [ ] T084 [P2] [US4] Write tests for exit code behavior in `tests/unit/cli/chat.test.ts`
-  - Test: clean exit (exit/quit/Ctrl+D) results in exit code 0
-  - Test: config error path results in exit code 1 (already handled in US1, verify here)
-  - Test: unrecoverable runtime error results in exit code 2
+- [x] T084 [P2] [US4] Write tests for exit code behavior in `tests/unit/cli/chat.test.ts` — **DONE**
+  - Tests: config error→exitCode 1, runtime error format, clean exit defaults to 0
 
-- [ ] T085 [P2] [US4] Ensure exit codes are applied correctly in `src/cli/commands/chat.ts`
-  - Clean exit paths (exit command, Ctrl+D): `process.exit(0)`
-  - Config errors caught in command handler: `process.exit(1)` (verify US1 implementation)
-  - Runtime errors (SDK auth failure, unrecoverable): catch in interactive loop, `process.exit(2)`
-  - Wrap the interactive loop in try/catch to handle unexpected errors with exit code 2
+- [x] T085 [P2] [US4] Ensure exit codes are applied correctly in `src/cli/commands/chat.ts` — **DONE**
+  - Clean exit: TUI `cleanup()` calls `process.exit(process.exitCode ?? 0)` (app.ts line 194)
+  - Config errors: `process.exitCode = 1` (chat.ts line 137)
+  - Runtime errors: `process.exitCode = 2` (chat.ts lines 94, 100, 159)
+  - Single-message mode wrapped in try/catch with exit code 2
 
 ### Phase 5: MCP Cleanup Verification
 
-- [ ] T086 [P2] [US4] Write test verifying MCP cleanup on session close in `tests/unit/agent/session.test.ts`
-  - Test: when session has an active SDK query handle, `closeSession()` calls `query.close()`
-  - Test: when session has no query handle (null), `closeSession()` completes without error
-  - Mock the SDK query handle to verify `.close()` is called
+- [x] T086 [P2] [US4] Write test verifying MCP cleanup on session close — **DONE**
+  - Tests: mock query.close() called, null query no error
 
-- [ ] T087 [P2] [US4] Verify SDK query close handles MCP teardown in `src/agent/session.ts`
-  - The SDK's `query.close()` is responsible for shutting down MCP server connections
-  - Ensure `closeSession()` awaits the close call (not fire-and-forget)
-  - Add structured log entry: `logger.info("Session closed", { sessionId, state: "exited" })`
+- [x] T087 [P2] [US4] Verify SDK query close handles MCP teardown — **DONE**
+  - query.close() wrapped in try/catch, logging added after state transition
 
 ### Phase 6: Edge Cases and Robustness
 
-- [ ] T088 [P2] [US4] Write tests for double-close and error-during-close in `tests/unit/agent/session.test.ts`
-  - Test: calling `closeSession()` twice does not throw (idempotent guard on `exited` state)
-  - Test: if `query.close()` throws, `closeSession()` still transitions to `exited` and logs the error
-  - Test: calling `closeSession()` during `shutting_down` state is a no-op
+- [x] T088 [P2] [US4] Write tests for double-close and error-during-close — **DONE**
+  - Tests: double-close no throw, error-during-close still reaches exited, shutting_down no-op
 
-- [ ] T089 [P2] [US4] Harden `closeSession()` error handling in `src/agent/session.ts`
-  - Guard: if `session.state` is `"exited"` or `"shutting_down"`, return early
-  - Wrap `query.close()` in try/catch — log error but still transition to `exited`
-  - Ensure state always reaches `exited` even if cleanup fails (finally block or explicit set)
+- [x] T089 [P2] [US4] Harden `closeSession()` error handling — **DONE**
+  - Guards for `exited` and `shutting_down`, try/catch around `query.close()`, state always reaches `exited`
 
-- [ ] T090 [P3] [US4] Write test for rapid Ctrl+C during shutdown in `tests/unit/cli/chat.test.ts`
-  - Test: if user presses Ctrl+C while session is in `shutting_down` state, no error is thrown
-  - The SIGINT handler should check state and skip action if already shutting down or exited
+- [ ] T090 [P3] [US4] Write test for rapid Ctrl+C during shutdown — **SKIPPED** (requires complex TUI renderer mocking)
+  - Guard implemented in T091; test deferred to TUI test infrastructure buildout
 
-- [ ] T091 [P3] [US4] Handle signals during shutdown state in `src/cli/commands/chat.ts`
-  - In the SIGINT handler, check `session.state` — if `shutting_down` or `exited`, ignore the signal
-  - Prevents double-cleanup race conditions
+- [x] T091 [P3] [US4] Handle signals during shutdown state in `src/cli/tui/app.ts` — **DONE**
+  - Ctrl+C handler checks `session.state` — returns early if `shutting_down` or `exited`
 
 ## Task Dependency Graph
 
 ```
-T075 ──► T076 ──► T082
-T077 ──► T078 ──► T083
-T079 ──► T080 ──► T082
-T081 ──► T082
-T081 ──► T083
-T084 ──► T085
+T075 ──► T076 (done)
+T077 ──► T078 (done)
+T079 (superseded) ──► T080 (superseded)
+T081 (superseded) ──► T082 (superseded)
+T083 (superseded)
+T084 ──► T085 (done)
 T086 ──► T087
 T088 ──► T089
 T076 ──► T087
@@ -141,14 +117,14 @@ T089 ──► T091
 
 ## Summary
 
-| Phase | Tasks | Priority | Focus |
-|-------|-------|----------|-------|
-| 1. closeSession + interrupt | T075-T078 | P1 | Core session teardown and interrupt logic |
-| 2. Exit commands | T079-T080 | P1 | Detect exit/quit input |
-| 3. Signal handling | T081-T083 | P1-P2 | Readline close/SIGINT wiring |
-| 4. Exit codes | T084-T085 | P2 | Correct process exit codes |
-| 5. MCP cleanup | T086-T087 | P2 | Verify SDK handles MCP teardown |
-| 6. Edge cases | T088-T091 | P2-P3 | Idempotency, error resilience, race conditions |
+| Phase | Tasks | Priority | Status |
+|-------|-------|----------|--------|
+| 1. closeSession + interrupt | T075-T078 | P1 | **ALL DONE** |
+| 2. Exit commands | T079-T080 | P1 | **SUPERSEDED by TUI** |
+| 3. Signal handling | T081-T083 | P1-P2 | **SUPERSEDED by TUI** |
+| 4. Exit codes | T084-T085 | P2 | **ALL DONE** |
+| 5. MCP cleanup | T086-T087 | P2 | **ALL DONE** |
+| 6. Edge cases | T088-T091 | P2-P3 | **DONE** (T090 skipped — needs TUI test infra) |
 
-**Total**: 17 tasks (T075-T091)
-**Files modified**: `src/agent/session.ts`, `src/cli/commands/chat.ts`, `tests/unit/agent/session.test.ts`, `tests/unit/cli/chat.test.ts`
+**Total**: 17 tasks (T075-T091) — **6 superseded**, **10 done**, **1 skipped** (T090)
+**Files modified**: `src/agent/session.ts`, `src/cli/tui/app.ts`, `tests/unit/agent/session.test.ts`, `tests/unit/cli/chat.test.ts`

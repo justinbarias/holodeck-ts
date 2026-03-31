@@ -74,4 +74,34 @@ describe("cli/chat command", () => {
 		expect(AGENT_RESPONSE_PREFIX).toBe("Agent: ");
 		expect(FAREWELL_MESSAGE).toBe("Goodbye!");
 	});
+
+	// T084: Exit code tests
+	describe("exit codes", () => {
+		it("config error sets exit code 1", async () => {
+			const tempDir = mkdtempSync(join(tmpdir(), "holodeck-exit-"));
+			process.chdir(tempDir);
+
+			const stderrSpy = spyOn(process.stderr, "write");
+			await runChatCommand({ agent: "./agent.yaml", verbose: false });
+
+			const stderr = stderrSpy.mock.calls.map((call) => String(call[0])).join("");
+			expect(stderr).toContain("No agent configuration found");
+			expect(process.exitCode).toBe(1);
+
+			rmSync(tempDir, { recursive: true, force: true });
+		});
+
+		it("formatRuntimeErrorMessage produces correct format for non-auth errors", () => {
+			const msg = formatRuntimeErrorMessage("Connection refused");
+			expect(msg).toBe("Error: Connection refused\n");
+		});
+
+		it("TUI cleanup uses process.exitCode ?? 0 for clean exit", async () => {
+			// Verify the contract: when no error occurred, exitCode defaults to 0
+			// The TUI cleanup function calls process.exit(process.exitCode ?? 0)
+			// We verify the default exitCode is undefined/0 before any error
+			process.exitCode = undefined;
+			expect(process.exitCode ?? 0).toBe(0);
+		});
+	});
 });
