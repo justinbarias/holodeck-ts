@@ -39,7 +39,8 @@ export function formatRuntimeErrorMessage(message: string): string {
 	if (isAuthError) {
 		return (
 			"Error: Authentication failed — invalid or expired credentials.\n" +
-			"  Set ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN.\n"
+			"  Set ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN.\n" +
+			"  For Ollama/custom endpoints, set ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN.\n"
 		);
 	}
 

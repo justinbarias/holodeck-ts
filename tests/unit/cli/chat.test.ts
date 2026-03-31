@@ -49,7 +49,8 @@ describe("cli/chat command", () => {
 		const auth = formatRuntimeErrorMessage("authentication_failed");
 		expect(auth).toBe(
 			"Error: Authentication failed — invalid or expired credentials.\n" +
-				"  Set ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN.\n",
+				"  Set ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN.\n" +
+				"  For Ollama/custom endpoints, set ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN.\n",
 		);
 
 		const network = formatRuntimeErrorMessage("Network timeout");
