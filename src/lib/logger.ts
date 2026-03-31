@@ -1,55 +1,70 @@
-import { configure, getConsoleSink, getLogger, type Logger, type LogLevel } from "@logtape/logtape";
+import { appendFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+	configure,
+	defaultTextFormatter,
+	getConsoleSink,
+	getLogger,
+	type Logger,
+	type LogLevel,
+	type Sink,
+} from "@logtape/logtape";
 
 export interface LoggingOptions {
 	verbose: boolean;
+	tui?: boolean;
 }
 
 let initialized = false;
-let initializedVerbose = false;
+let initializedKey = "";
 
-function writeToStderr(...args: unknown[]): void {
-	process.stderr.write(`${args.join(" ")}\n`);
+const logPath = join(tmpdir(), "holodeck-debug.log");
+
+export function getLogPath(): string {
+	return logPath;
 }
 
-const stderrConsole = {
-	debug: writeToStderr,
-	error: writeToStderr,
-	info: writeToStderr,
-	log: writeToStderr,
-	warn: writeToStderr,
-	write: (message: string) => {
-		process.stderr.write(message);
-	},
-} as unknown as Console;
+function getFileSink(): Sink {
+	return (record) => {
+		const text = defaultTextFormatter(record);
+		appendFileSync(logPath, text);
+	};
+}
 
 export async function setupLogging(options: LoggingOptions): Promise<void> {
-	if (initialized && initializedVerbose === options.verbose) {
+	const key = `${options.verbose}-${options.tui}`;
+	if (initialized && initializedKey === key) {
 		return;
 	}
 
 	const appLevel: LogLevel = options.verbose ? "debug" : "info";
 
+	const sinks: Record<string, Sink> = options.tui
+		? { file: getFileSink() }
+		: { console: getConsoleSink() };
+
+	const sinkName = options.tui ? "file" : "console";
+
 	await configure({
 		reset: true,
-		sinks: {
-			stderr: getConsoleSink({ console: stderrConsole }),
-		},
+		sinks,
 		loggers: [
 			{
 				category: ["holodeck"],
-				sinks: ["stderr"],
+				sinks: [sinkName],
 				lowestLevel: appLevel,
 			},
 			{
 				category: ["logtape"],
-				sinks: ["stderr"],
+				sinks: [sinkName],
 				lowestLevel: "warning",
 			},
 		],
 	});
 
 	initialized = true;
-	initializedVerbose = options.verbose;
+	initializedKey = key;
 }
 
 export function getModuleLogger(moduleName: string): Logger {

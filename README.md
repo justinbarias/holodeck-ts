@@ -172,10 +172,10 @@ claude:
   subagents:
     enabled: true
     max_parallel: 4
-  allowed_tools:                      # null = all configured tools
-    - knowledge_base
-    - github
-    - Read
+  allowed_tools:                      # null = all tools available
+    - knowledge_base                  # HoloDeck tool (by name from tools[])
+    - github                          # HoloDeck MCP tool (by name from tools[])
+    - Read                            # Claude Code built-in tool
     - Write
     - Bash
 
@@ -310,6 +310,46 @@ Reusable agent capabilities defined as `SKILL.md` files, automatically discovere
 ### Native Claude Code Tools
 
 Full access to built-in Claude Code tools: Read, Write, Edit, Bash, Glob, Grep, WebSearch, WebFetch.
+
+### `allowed_tools` Reference
+
+The `claude.allowed_tools` field controls which tools are auto-approved without permission prompts. Set to `null` (default) for all tools. Values are **case-sensitive strings** from three categories:
+
+**HoloDeck-defined tools** — the `name` field from your `tools[]` entries:
+
+```yaml
+allowed_tools:
+  - knowledge_base    # matches tools[].name
+  - github            # matches tools[].name
+```
+
+**Claude Code built-in tools:**
+
+| Tool | Description | | Tool | Description |
+|------|-------------|-|------|-------------|
+| `Read` | Read files | | `WebFetch` | Fetch URL content |
+| `Write` | Create/overwrite files | | `WebSearch` | Web search |
+| `Edit` | Targeted file edits | | `Agent` | Spawn subagents |
+| `Bash` | Shell commands | | `Skill` | Execute skills |
+| `Glob` | Find files by pattern | | `NotebookEdit` | Edit Jupyter notebooks |
+| `Grep` | Search file contents | | `AskUserQuestion` | Ask user questions |
+
+<details>
+<summary>Full list of built-in tools</summary>
+
+`Agent`, `AskUserQuestion`, `Bash`, `CronCreate`, `CronDelete`, `CronList`, `Edit`, `EnterPlanMode`, `EnterWorktree`, `ExitPlanMode`, `ExitWorktree`, `Glob`, `Grep`, `ListMcpResourcesTool`, `LSP`, `NotebookEdit`, `PowerShell`, `Read`, `ReadMcpResourceTool`, `Skill`, `TaskCreate`, `TaskGet`, `TaskList`, `TaskOutput`, `TaskStop`, `TaskUpdate`, `TodoWrite`, `ToolSearch`, `WebFetch`, `WebSearch`, `Write`
+
+</details>
+
+**MCP server tools** — referenced as `mcp__<serverName>__<toolName>`:
+
+```yaml
+allowed_tools:
+  - mcp__playwright__navigate
+  - mcp__github__search_issues
+```
+
+> **Note:** `allowed_tools` auto-approves listed tools but does not restrict the agent to only those tools. Unlisted tools fall through to the `permission_mode` setting. For a locked-down agent, combine `allowed_tools` with `permission_mode: manual`.
 
 ## Evaluation
 

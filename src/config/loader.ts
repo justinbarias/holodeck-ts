@@ -49,7 +49,9 @@ export async function loadAgentConfig(path: string): Promise<AgentConfig> {
 			};
 		}
 
-		configLogger.debug("Loaded agent configuration from {path}.", {
+		configLogger.info("Loaded agent config: {name} (model: {model}).", {
+			name: config.name,
+			model: config.model.name,
 			path: absoluteConfigPath,
 		});
 		return config;

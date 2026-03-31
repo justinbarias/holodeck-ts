@@ -108,6 +108,11 @@ export async function createChatSession(config: AgentConfig): Promise<ChatSessio
 	const skills = await discoverSkills(skillsBasePath);
 	const mcpServers = buildMCPServers(config.tools);
 
+	sessionLogger.info("Chat session created for agent {name} with {skillCount} skills.", {
+		name: config.name,
+		skillCount: skills.length,
+	});
+
 	return {
 		sessionId: null,
 		agentConfig: config,
@@ -177,6 +182,9 @@ export async function* sendMessage(session: ChatSession, input: string): AsyncGe
 	}
 
 	session.state = "streaming";
+	sessionLogger.info("Sending message (sessionId: {sessionId}).", {
+		sessionId: session.sessionId ?? "new",
+	});
 	const activeQuery = query({
 		prompt: input,
 		options,
@@ -232,6 +240,7 @@ export async function closeSession(session: ChatSession): Promise<void> {
 	}
 
 	session.state = "shutting_down";
+	sessionLogger.info("Closing chat session.");
 
 	if (session.query) {
 		session.query.close();

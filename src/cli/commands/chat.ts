@@ -95,7 +95,8 @@ export async function runChatCommand(options: ChatCommandOptions): Promise<void>
 		options.agent && options.agent.trim().length > 0 ? options.agent : "./agent.yaml";
 	const verbose = Boolean(options.verbose);
 
-	await setupLogging({ verbose });
+	const isTUI = options.prompt === undefined || options.prompt.trim().length === 0;
+	await setupLogging({ verbose, tui: isTUI });
 	await loadHolodeckEnv();
 
 	let config: AgentConfig;
