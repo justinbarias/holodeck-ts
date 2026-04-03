@@ -14,8 +14,8 @@ Build a hierarchical document vector store tool that parses markdown documents w
 - `@anthropic-ai/claude-agent-sdk` 0.2.87 — agent integration via `tool()` + `createSdkMcpServer()`
 - `zod` 4.3.6 — input validation (raw shape for tool, `.strict()` for config)
 - `yaml` 2.8.3 — config parsing
-- `redis` 5.11.0 — Redis client with `@redis/search` for vector + full-text
-- `postgres` 3.4.8 — Postgres client (tagged template SQL)
+- `redis` 5.11.0 — Redis client with `@redis/search` for vector + full-text. **Note:** `FT.HYBRID` requires Redis Server 8.4.0+ and is marked `@experimental` in node-redis; API may change
+- `postgres` 3.4.8 — Postgres client (tagged template SQL, ~380KB, zero deps)
 - `pgvector` 0.2.1 — vector serialization helper for pgvector
 - `chromadb` 3.4.0 — ChromaDB vector client
 - `@opensearch-project/opensearch` 3.5.1 — OpenSearch BM25 client
@@ -145,11 +145,11 @@ All backend scores are normalized to 0.0-1.0 (higher = better) before RRF fusion
 
 ### 5. Contextual Retrieval via Agent SDK
 
-Context generation uses the Claude Agent SDK `query()` function, modeling the entire contextualization of a document as a single task. For large documents with many chunks, the main agent subdivides work into subagents (each processing a configurable batch of chunks in parallel). This approach:
+Context generation uses the Claude Agent SDK `query()` function with named agent definitions via `agents: Record<string, AgentDefinition>`. A `context-generator` agent is defined with its own prompt, model (`claude-haiku-4-5`), and constrained tools. For large documents with many chunks, the main agent dispatches work to the `context-generator` agent. This approach:
 - **Unifies auth** -- works with OAuth tokens, API keys, Bedrock, Vertex
 - **Eliminates complexity** -- no prompt caching, no concurrency control, no rate limit handling
-- **Solves max_tokens** -- subagent batching keeps each call's output manageable
-- **Maps cleanly to YAML config** -- `context_concurrency` -> `subagents.max_parallel`
+- **Uses the actual SDK API** -- `agents` (named agent definitions), not `subagents: { enabled, max_parallel }`
+- **Note**: Manual batching of chunks is needed since the SDK doesn't have a built-in `max_parallel` toggle; use `Promise.all` with a concurrency limiter mapped from `context_concurrency` YAML config
 
 ### 6. Document Ingestion Pipeline
 
@@ -168,7 +168,7 @@ Source files (PDF, DOCX, HTML, TXT, MD)
 
 **Document conversion:** Per-format converters behind a `DocumentConverter` interface. PDF via `@opendocsg/pdf2md` (heuristic heading detection), DOCX via `mammoth` + `turndown` (excellent heading preservation), HTML via `turndown`, TXT as passthrough, MD as-is.
 
-**Markdown chunking:** Custom ~535 LOC chunker using `marked.lexer()` (already installed). Stack-based heading hierarchy algorithm builds parent chains and section IDs. Two strategies: `structure` (heading-aware, default) splits at heading boundaries; `token` (simple) splits at configurable token count. Oversized sections split at sentence boundaries. Configurable overlap.
+**Markdown chunking:** Custom ~535 LOC chunker using `marked.lexer()` (already installed). `lexer()` returns a `TokensList` of block-level tokens; each may contain nested `tokens[]` for inline content, but the chunker only iterates top-level blocks and uses their `.raw` property. Stack-based heading hierarchy algorithm builds parent chains and section IDs. Two strategies: `structure` (heading-aware, default) splits at heading boundaries; `token` (simple) splits at configurable token count. Oversized sections split at sentence boundaries. Configurable overlap.
 
 ### 7. Schema Updates
 
@@ -178,11 +178,23 @@ The existing `HierarchicalDocumentToolSchema` in `src/config/schema.ts` needs a 
 
 No constitution violations to justify. All design decisions align with existing patterns.
 
-## Dependencies to Install (Production)
+## Dependencies to Install
 
+**Already installed** (no action needed): `postgres` 3.4.8, `pgvector` 0.2.1, `marked` 15.0.12, `zod` 4.3.6, `@anthropic-ai/claude-agent-sdk` 0.2.87, `yaml` 2.8.3
+
+**Production dependencies to add:**
 ```bash
-bun add redis postgres pgvector chromadb @opensearch-project/opensearch @opendocsg/pdf2md mammoth turndown turndown-plugin-gfm
+bun add redis chromadb @opensearch-project/opensearch @opendocsg/pdf2md mammoth turndown turndown-plugin-gfm
+```
+
+**Dev dependencies to add:**
+```bash
 bun add --dev @types/turndown
 ```
 
-**Note:** `marked` is already installed (v15.0.12). No direct `@anthropic-ai/sdk` dependency needed -- contextual retrieval uses the Agent SDK's `query()` with subagent batching for auth-unified context generation.
+**Notes:**
+- No direct `@anthropic-ai/sdk` dependency needed — contextual retrieval uses the Agent SDK's `query()` with named `agents` definitions for auth-unified context generation.
+- `@opendocsg/pdf2md` uses `unpdf` (pdf.js) internally which relies on WASM/Web Workers — **Bun compatibility is unverified**. Runtime testing required before committing to this library. If incompatible, consider an alternative or dropping PDF support from the initial implementation.
+- `@opensearch-project/opensearch` has 6 transitive dependencies (`aws4`, `debug`, `hpagent`, `json11`, `ms`, `secure-json-parse`), ~5.3MB total.
+- `turndown-plugin-gfm` is ~24KB.
+- `mammoth` has a built-in `convertToMarkdown()` method — evaluate whether this produces acceptable output vs. `convertToHtml()` + turndown during implementation.

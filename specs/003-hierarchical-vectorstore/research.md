@@ -10,8 +10,8 @@
 
 ### Rationale
 - **Only JS/TS client with first-party RediSearch module support** including typed wrappers for `FT.CREATE`, `FT.SEARCH`, `FT.AGGREGATE`, and `FT.HYBRID`
-- **Dedicated hybrid search command**: `FT.HYBRID` (`client.ft.hybrid()`) supports combining text search + vector similarity with RRF or LINEAR fusion methods — maps directly to our hybrid search requirement
-- **Comprehensive vector field support**: HNSW/FLAT/SVS-VAMANA algorithms, FLOAT32/FLOAT64/BFLOAT16 types, COSINE/L2/IP distance metrics
+- **Dedicated hybrid search command**: `FT.HYBRID` (`client.ft.hybrid()`) supports combining text search + vector similarity with RRF or LINEAR fusion methods — maps directly to our hybrid search requirement. **Note:** `FT.HYBRID` requires Redis Server 8.4.0+ and is marked `@experimental` in node-redis; API may change
+- **Comprehensive vector field support**: HNSW/FLAT/VAMANA (key `.VAMANA`, value `"SVS-VAMANA"`) algorithms, FLOAT32/FLOAT64/BFLOAT16/FLOAT16/INT8/UINT8 types, COSINE/L2/IP distance metrics. **Note:** SVS-VAMANA restricts vector types to FLOAT16/FLOAT32 only
 - **Bun compatible**: All imports, client construction, `ft.*` methods, and `Float32Array`-to-`Buffer` vector serialization confirmed working
 - **Actively maintained**: 17.5K GitHub stars, 8.8M weekly npm downloads, last push 2026-03-30
 
@@ -36,7 +36,7 @@
 ### Rationale
 - **First-class Bun support**: Explicitly built for Node.js, Deno, Bun, and CloudFlare; confirmed working under Bun 1.3.11
 - **Tagged template SQL API**: Parameters are automatically extracted and safely parameterized. pgvector operators (`<=>`, `<->`, `<#>`) and FTS functions (`to_tsvector`, `to_tsquery`, `ts_rank`) work naturally in template literals
-- **Lightweight**: Zero dependencies, ~50KB, pure JS
+- **Lightweight**: Zero dependencies, ~380KB, pure JS
 - **Built-in connection pooling**: Configurable `max` connections, idle timeouts, automatic prepared statements
 - **pgvector helper**: `pgvector` npm package provides `toSql()`/`fromSql()` for serializing `number[]` to pgvector's `[1,2,3]` format; tiny, zero deps, same pgvector GitHub org
 - **Single connection for both modalities**: Vector search and tsvector/GIN queries both go through the same `sql` tagged template
@@ -89,7 +89,7 @@
 - **Bun compatible**: All key operations (search, index, bulk, indices management) verified working under Bun runtime
 - **Full TypeScript types**: Auto-generated from OpenSearch API spec with complete type definitions for queries, responses, mappings, and analyzers
 - **Built-in connection pooling, retry logic, NDJSON serialization** — would need manual implementation with a thin HTTP wrapper
-- **Manageable footprint**: ~5.3MB total (client 4.6MB + 4 new transitive deps ~780KB: `aws4`, `hpagent`, `json11`, `secure-json-parse`)
+- **Manageable footprint**: ~5.3MB total (client 4.6MB + 6 transitive deps: `aws4`, `debug`, `hpagent`, `json11`, `ms`, `secure-json-parse`)
 
 ### Alternatives Considered
 | Library | Why Rejected |
@@ -141,12 +141,14 @@ const server = createSdkMcpServer({ name: "vectorstore", version: "1.0.0", tools
 interface CallToolResult {
   content: Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }>;
   isError?: boolean;
+  // Additional optional fields: _meta, structuredContent, annotations
 }
 ```
 
 - Return JSON-stringified results in `{ type: "text", text: JSON.stringify(output) }`
 - Use `isError: true` for tool failures (vectorstore unavailable, embedding service down)
 - Empty results are NOT errors — return `total_results: 0`
+- `CallToolResult` is re-exported from `@modelcontextprotocol/sdk/types.js` and has additional optional fields (`_meta`, `structuredContent`, `annotations`) beyond the essential ones shown above
 
 ### MCP vs External Server
 In-process MCP via `tool()` is recommended because the vectorstore is tightly coupled to HoloDeck's in-process state (loaded/indexed document chunks, embedding cache). An external MCP server would require serializing the entire index across process boundaries or running a long-lived sidecar.
@@ -155,7 +157,7 @@ In-process MCP via `tool()` is recommended because the vectorstore is tightly co
 
 ## 6. Contextual Retrieval (Context Prefix Generation)
 
-### Decision: Claude Agent SDK `query()` with subagent-based parallelism
+### Decision: Claude Agent SDK `query()` with named agent definitions
 
 ### Technique Overview
 Contextual Retrieval prepends a short AI-generated context (50-100 tokens) to each chunk **before** embedding and indexing. Traditional RAG chunks lose surrounding context — e.g., "Revenue grew 3% over the previous quarter" is ambiguous without its parent document. Contextual Retrieval fixes this by prefixing each chunk with situational context.
@@ -181,25 +183,27 @@ Retrieval strategy: retrieve top-150 candidates, rerank to top-20.
 
 ### Architecture: Agent SDK as Context Generator
 
-Instead of using the raw Anthropic Messages API (`@anthropic-ai/sdk`) directly, context generation is modeled as a single Agent SDK task per document. This solves auth unification -- works with `CLAUDE_CODE_OAUTH_TOKEN`, API keys, Bedrock, Vertex, whatever the Agent SDK is configured with.
+Instead of using the raw Anthropic Messages API (`@anthropic-ai/sdk`) directly, context generation is modeled as an Agent SDK task using named agent definitions via `agents: Record<string, AgentDefinition>`. This solves auth unification -- works with `CLAUDE_CODE_OAUTH_TOKEN`, API keys, Bedrock, Vertex, whatever the Agent SDK is configured with.
 
 **Architecture:**
 ```
-query() "main agent" -- receives full document + all chunks
-  Subagent 1: chunks[0..batch_size-1]   -> { contexts[] }
-  Subagent 2: chunks[batch_size..2n-1]  -> { contexts[] }
-  Subagent N: chunks[remaining]         -> { contexts[] }
--> Main agent collects all subagent results, returns combined JSON
+query() with agents: { "context-generator": { description, prompt, model } }
+  -> Main agent receives full document + all chunks
+  -> For large documents, chunks are batched manually
+  -> Each batch is processed via a separate query() call with the context-generator agent
+  -> Results are collected and merged
 ```
 
-For large documents with many chunks, the main agent subdivides work into subagents, each processing a configurable batch of chunks. This solves the max_tokens limitation -- each subagent handles a manageable subset.
+For large documents with many chunks, batching is handled manually with a concurrency limiter (e.g., `Promise.all` with concurrency limit from `context_concurrency`). Each batch query uses the `context-generator` agent definition.
 
 **YAML config mapping:**
 | YAML field | Agent SDK mapping |
 |---|---|
-| `context_concurrency` | `subagents.max_parallel` in `query()` options |
+| `context_concurrency` | Manual concurrency limiter for parallel `query()` calls |
 | `context_max_tokens` | Instruction in prompt: "max N tokens per context" |
 | `contextual_embeddings: true/false` | Whether to invoke the pipeline at all |
+
+**Note:** The SDK's `agents` API uses `agents: Record<string, AgentDefinition>` where `AgentDefinition` includes `description`, `prompt`, `tools`, and `model` fields. There is no `subagents: { enabled, max_parallel }` option — parallelism must be managed at the application level.
 
 ### Prompt Template
 
@@ -240,57 +244,72 @@ async function generateContexts(
   chunks: { id: string; content: string }[],
   config: { context_max_tokens: number; context_concurrency: number; batch_size: number },
 ): Promise<Map<string, string>> {
-  const prompt = buildContextPrompt(document, chunks, config);
+  // Batch chunks for parallel processing
+  const batches: typeof chunks[] = [];
+  for (let i = 0; i < chunks.length; i += config.batch_size) {
+    batches.push(chunks.slice(i, i + config.batch_size));
+  }
 
-  let result = "";
-  for await (const message of query({
-    prompt,
-    options: {
-      model: "claude-haiku-4-5",
-      permissionMode: "acceptAll",
-      maxTurns: chunks.length > config.batch_size ? undefined : 1,
-      subagents: {
-        enabled: chunks.length > config.batch_size,
-        max_parallel: config.context_concurrency,
-      },
-      allowedTools: [],
-    },
-  })) {
-    if (message.type === "result" && message.subtype === "success") {
-      result = message.result;
+  // Process batches with manual concurrency control
+  const results = new Map<string, string>();
+  const concurrencyLimit = config.context_concurrency;
+
+  for (let i = 0; i < batches.length; i += concurrencyLimit) {
+    const batchGroup = batches.slice(i, i + concurrencyLimit);
+    const batchResults = await Promise.all(
+      batchGroup.map(async (batch) => {
+        const prompt = buildContextPrompt(document, batch, config);
+        let result = "";
+        for await (const message of query({
+          prompt,
+          options: {
+            model: "claude-haiku-4-5",
+            permissionMode: "acceptAll",
+            maxTurns: 1,
+            allowedTools: [],
+          },
+        })) {
+          if (message.type === "result" && message.subtype === "success") {
+            result = message.result;
+          }
+        }
+        return parseContextResult(result); // Zod-validated JSON parse
+      }),
+    );
+    for (const batchResult of batchResults) {
+      for (const [id, context] of batchResult) {
+        results.set(id, context);
+      }
     }
   }
 
-  return parseContextResult(result); // Zod-validated JSON parse
+  return results;
 }
 ```
 
 ### What This Eliminates
 - **No `@anthropic-ai/sdk` direct dependency** -- auth handled by Agent SDK
-- **No `mapWithConcurrency()` helper** -- parallelism via SDK subagents
 - **No exponential backoff / rate limit logic** -- SDK handles retries
-- **No prompt cache management** -- single call per document (or per batch via subagents)
-- **No concurrency control layer** -- `subagents.max_parallel` handles this
-- **No max_tokens limitation** -- subagent batching subdivides work
+- **No prompt cache management** -- batched calls per document
 
 ### What Remains
 - A function to format the prompt (document + chunks -> structured prompt string)
-- A `query()` call with constrained options
+- Manual batching and concurrency control (`Promise.all` with concurrency limit)
+- A `query()` call with constrained options per batch
 - A Zod schema to parse/validate the JSON result
-- Error handling: if `message.subtype === "error"`, retry the document
+- Error handling: if `message.subtype` indicates error, retry the batch
 
 ### Trade-offs vs Direct API
 
 | Factor | Agent SDK approach | Direct `@anthropic-ai/sdk` |
 |---|---|---|
 | Auth | Unified (OAuth, API key, Bedrock, Vertex) | Needs separate `ANTHROPIC_API_KEY` |
-| Subprocess overhead | 1 per document | 0 (direct HTTP) |
-| Prompt caching | Not needed (all-in-one-call) | Critical for cost efficiency |
-| Parallelism | SDK subagents (`max_parallel`) | Manual `mapWithConcurrency()` |
+| Subprocess overhead | 1 per batch | 0 (direct HTTP) |
+| Prompt caching | Not needed (batched calls) | Critical for cost efficiency |
+| Parallelism | Manual (`Promise.all` + concurrency limit) | Manual `mapWithConcurrency()` |
 | Rate limits | SDK handles internally | Manual backoff logic |
-| Complexity | Prompt template + parse result | Cache mgmt + concurrency + backoff |
-| Max tokens | Solved by subagent batching | N/A (per-chunk calls) |
-| Failure granularity | Per-document retry | Per-chunk retry |
+| Complexity | Prompt template + batch mgmt + parse result | Cache mgmt + concurrency + backoff |
+| Failure granularity | Per-batch retry | Per-chunk retry |
 
 ---
 
@@ -330,7 +349,7 @@ All formats convert to Markdown first, then feed into the section-aware chunker.
 
 **Library:** `@opendocsg/pdf2md` v0.2.5 (last updated 2026-03-03)
 
-- **Bun compatible:** Confirmed
+- **Bun compatible:** Unverified — uses `unpdf` (pdf.js) internally which relies on WASM/Web Workers; these have had historical edge cases in Bun. Runtime testing required before committing
 - **Heading preservation:** Good (heuristic-based). Uses font height analysis: finds "most used height" (body text), treats larger heights as headings. Maps heights to H1-H4 levels. ALL-CAPS text with different font gets classified as next heading level.
 - **API:** `const md = await pdf2md(pdfBuffer)` -- single function, returns markdown string
 - **Dependencies:** Uses `unpdf` (pdf.js) internally, ~2.2MB total
@@ -349,6 +368,7 @@ All formats convert to Markdown first, then feed into the section-aware chunker.
 - **Bun compatible:** All confirmed
 - **Heading preservation:** Excellent. DOCX has semantic heading styles (Heading 1-6). Mammoth maps to `<h1>`-`<h6>`, turndown converts to `#`-`######`
 - **Pipeline:** `DOCX buffer -> mammoth.convertToHtml() -> TurndownService.turndown(html) -> markdown`
+- **Alternative:** mammoth has a built-in `convertToMarkdown()` method — evaluate whether this produces acceptable output vs. the HTML+turndown pipeline during implementation
 - **Preserved elements:** Headings, bold, italic, nested lists, tables (GFM plugin), code blocks, hyperlinks
 - **Limitations:** Complex nested/merged tables may not convert perfectly; track changes and comments stripped; embedded objects (charts, SmartArt) lost
 
@@ -385,13 +405,14 @@ No existing npm library does section-aware hierarchical markdown chunking with p
 
 ### Parser Choice: `marked` v15.0.12 (already installed)
 
-`marked.lexer()` produces a flat token list with heading tokens containing `depth` (1-6) and `raw` (original markdown). Compared to the `remark`/`mdast` ecosystem (5+ new packages, 35 transitive deps), `marked` requires zero new dependencies and its flat token list is actually easier to iterate for chunking.
+`marked.lexer()` returns a `TokensList` (`Token[] & { links: Links }`) — an array of block-level tokens. Each token has a `.raw` property with the original markdown source. Heading tokens have a `depth` field (1-6). **Important:** Block-level tokens may contain nested `tokens[]` for inline content (bold, italic, links, etc.), so the structure is not truly flat. However, for chunking purposes, only top-level block tokens and their `.raw` property are needed — nested inline tokens can be ignored. Compared to the `remark`/`mdast` ecosystem (5+ new packages, 35 transitive deps), `marked` requires zero new dependencies.
 
 Key `marked.lexer()` token properties:
 - `token.type`: `"heading"`, `"paragraph"`, `"list"`, `"code"`, `"table"`, `"blockquote"`, etc.
 - `token.depth`: 1-6 for heading tokens
 - `token.text`: heading text content
 - `token.raw`: original markdown source (available on every token)
+- `token.tokens`: nested inline tokens (present on heading, paragraph, etc. — ignored by chunker)
 
 ### Architecture
 
@@ -473,14 +494,14 @@ Anthropic/Claude tokenization averages ~1.3 tokens per word for English. A word-
 | Package | Version | Purpose | Size |
 |---|---|---|---|
 | `redis` | 5.11.0 | Redis client + RediSearch | Bundles `@redis/client`, `@redis/search` |
-| `postgres` | 3.4.8 | Postgres client | ~50KB, zero deps |
+| `postgres` | 3.4.8 | Postgres client | ~380KB, zero deps |
 | `pgvector` | 0.2.1 | Vector serialization helper | ~few KB, zero deps |
 | `chromadb` | 3.4.0 | ChromaDB vector client | Uses `@hey-api/client-fetch` |
-| `@opensearch-project/opensearch` | 3.5.1 | OpenSearch BM25 search | ~5.3MB total |
+| `@opensearch-project/opensearch` | 3.5.1 | OpenSearch BM25 search | ~5.3MB total (6 transitive deps) |
 | `@opendocsg/pdf2md` | 0.2.5 | PDF to Markdown | ~2.2MB (includes unpdf) |
 | `mammoth` | 1.12.0 | DOCX to HTML | ~2.3MB |
 | `turndown` | 7.2.2 | HTML to Markdown | ~208KB |
-| `turndown-plugin-gfm` | 1.0.2 | GFM tables/strikethrough for turndown | ~44KB |
+| `turndown-plugin-gfm` | 1.0.2 | GFM tables/strikethrough for turndown | ~24KB |
 | `marked` | 15.0.12 | Markdown lexer (already installed) | Already in project |
 
 All packages confirmed Bun-compatible with full TypeScript support.

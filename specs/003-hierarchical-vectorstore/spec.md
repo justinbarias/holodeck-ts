@@ -184,7 +184,7 @@ A user developing locally or running tests configures `database.provider: in-mem
 
 - Embedding providers (Ollama, Azure OpenAI) are pre-configured and accessible; this tool does not manage their lifecycle or deployment.
 - External services (Redis, Postgres, ChromaDB, OpenSearch) are provisioned and reachable at the configured connection strings; the tool does not manage infrastructure.
-- Source documents are primarily markdown format (.md); support for additional formats (.txt, .pdf, .csv) is out of scope for the initial implementation but the architecture should not preclude future additions.
+- Source documents include markdown (.md), plain text (.txt), HTML (.html/.htm), DOCX (.docx), and PDF (.pdf). PDF support depends on Bun runtime compatibility with `@opendocsg/pdf2md` (WASM/Web Workers) — if incompatible, PDF conversion will be a documented limitation with a stub that throws a descriptive error.
 - The in-memory BM25 implementation (used only for `in-memory` backend) uses a simple tokenization strategy (whitespace/alphanumeric splitting); advanced NLP tokenization is not required.
 - Redis uses the RediSearch module for both vector similarity and full-text keyword search natively (no in-memory BM25 fallback).
 - Postgres uses pgvector for vector similarity and native full-text search (tsvector with GIN indexes) for keyword search (no in-memory BM25 fallback).
