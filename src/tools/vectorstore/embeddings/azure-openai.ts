@@ -1,3 +1,5 @@
+import type { APIError } from "openai";
+import { AzureOpenAI } from "openai";
 import { ToolError } from "../../../lib/errors.js";
 import type { EmbeddingProvider } from "./types.js";
 
@@ -9,33 +11,32 @@ export interface AzureOpenAIConfig {
 	readonly dimensions: number;
 }
 
-interface AzureEmbeddingResponse {
-	data: Array<{ embedding: number[]; index: number }>;
-}
-
 export class AzureOpenAIEmbeddingProvider implements EmbeddingProvider {
 	private readonly config: AzureOpenAIConfig;
+	private readonly client: AzureOpenAI;
 
 	constructor(config: AzureOpenAIConfig) {
 		this.config = config;
+		this.client = new AzureOpenAI({
+			endpoint: config.endpoint,
+			apiKey: config.apiKey,
+			apiVersion: config.apiVersion,
+		});
 	}
 
 	async embed(texts: string[]): Promise<number[][]> {
-		const url = `${this.config.endpoint}/openai/deployments/${this.config.model}/embeddings?api-version=${this.config.apiVersion}`;
-		let response: Response;
-
 		try {
-			response = await fetch(url, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					"api-key": this.config.apiKey,
-				},
-				body: JSON.stringify({ input: texts }),
+			const result = await this.client.embeddings.create({
+				model: this.config.model,
+				input: texts,
+				encoding_format: "float",
 			});
+			return result.data.sort((a, b) => a.index - b.index).map((d) => d.embedding as number[]);
 		} catch (error) {
+			const apiError = error as APIError;
+			const statusInfo = apiError.status ? ` (${apiError.status})` : "";
 			throw new ToolError(
-				`Azure OpenAI embedding request failed: ${error instanceof Error ? error.message : String(error)}`,
+				`Azure OpenAI embedding request failed${statusInfo}: ${error instanceof Error ? error.message : String(error)}`,
 				{
 					cause: error instanceof Error ? error : undefined,
 					backend: "azure_openai",
@@ -43,16 +44,6 @@ export class AzureOpenAIEmbeddingProvider implements EmbeddingProvider {
 				},
 			);
 		}
-
-		if (!response.ok) {
-			throw new ToolError(
-				`Azure OpenAI embedding API returned ${response.status}: ${await response.text()}`,
-				{ backend: "azure_openai", operation: "embed" },
-			);
-		}
-
-		const data = (await response.json()) as AzureEmbeddingResponse;
-		return data.data.sort((a, b) => a.index - b.index).map((d) => d.embedding);
 	}
 
 	dimensions(): number {

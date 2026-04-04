@@ -1,13 +1,20 @@
-import { afterEach, describe, expect, it, mock } from "bun:test";
+import { describe, expect, it, mock } from "bun:test";
+
+const mockEmbed = mock();
+
+mock.module("ollama", () => ({
+	Ollama: class {
+		host: string;
+		constructor(opts: { host: string }) {
+			this.host = opts.host;
+		}
+		embed = mockEmbed;
+	},
+}));
+
 import { OllamaEmbeddingProvider } from "../../../../../src/tools/vectorstore/embeddings/ollama.js";
 
 describe("OllamaEmbeddingProvider", () => {
-	const originalFetch = globalThis.fetch;
-
-	afterEach(() => {
-		globalThis.fetch = originalFetch;
-	});
-
 	it("returns configured dimensions", () => {
 		const provider = new OllamaEmbeddingProvider({
 			model: "nomic-embed-text",
@@ -20,13 +27,7 @@ describe("OllamaEmbeddingProvider", () => {
 	it("embeds a batch of texts", async () => {
 		const mockEmbedding = Array.from({ length: 768 }, () => Math.random());
 
-		globalThis.fetch = mock(
-			async () =>
-				new Response(JSON.stringify({ embeddings: [mockEmbedding] }), {
-					status: 200,
-					headers: { "Content-Type": "application/json" },
-				}),
-		) as unknown as typeof fetch;
+		mockEmbed.mockResolvedValueOnce({ embeddings: [mockEmbedding] });
 
 		const provider = new OllamaEmbeddingProvider({
 			model: "nomic-embed-text",
@@ -39,18 +40,8 @@ describe("OllamaEmbeddingProvider", () => {
 		expect(results[0]).toHaveLength(768);
 	});
 
-	it("calls correct Ollama API endpoint", async () => {
-		let capturedUrl = "";
-		let capturedBody = "";
-
-		globalThis.fetch = mock(async (input: string | URL | Request, init?: RequestInit) => {
-			capturedUrl = typeof input === "string" ? input : input.toString();
-			capturedBody = init?.body as string;
-			return new Response(JSON.stringify({ embeddings: [[0.1, 0.2, 0.3]] }), {
-				status: 200,
-				headers: { "Content-Type": "application/json" },
-			});
-		}) as unknown as typeof fetch;
+	it("calls Ollama SDK with correct parameters", async () => {
+		mockEmbed.mockResolvedValueOnce({ embeddings: [[0.1, 0.2, 0.3]] });
 
 		const provider = new OllamaEmbeddingProvider({
 			model: "nomic-embed-text",
@@ -59,16 +50,14 @@ describe("OllamaEmbeddingProvider", () => {
 		});
 
 		await provider.embed(["test"]);
-		expect(capturedUrl).toBe("http://localhost:11434/api/embed");
-		const body = JSON.parse(capturedBody);
-		expect(body.model).toBe("nomic-embed-text");
-		expect(body.input).toEqual(["test"]);
+		expect(mockEmbed).toHaveBeenCalledWith({
+			model: "nomic-embed-text",
+			input: ["test"],
+		});
 	});
 
 	it("throws ToolError on API failure", async () => {
-		globalThis.fetch = mock(
-			async () => new Response("Internal Server Error", { status: 500 }),
-		) as unknown as typeof fetch;
+		mockEmbed.mockRejectedValueOnce(new Error("Internal Server Error"));
 
 		const provider = new OllamaEmbeddingProvider({
 			model: "nomic-embed-text",
@@ -80,9 +69,7 @@ describe("OllamaEmbeddingProvider", () => {
 	});
 
 	it("throws ToolError on network error", async () => {
-		globalThis.fetch = mock(async () => {
-			throw new Error("ECONNREFUSED");
-		}) as unknown as typeof fetch;
+		mockEmbed.mockRejectedValueOnce(new Error("ECONNREFUSED"));
 
 		const provider = new OllamaEmbeddingProvider({
 			model: "nomic-embed-text",

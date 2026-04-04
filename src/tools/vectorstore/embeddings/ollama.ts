@@ -1,3 +1,4 @@
+import { Ollama } from "ollama";
 import { ToolError } from "../../../lib/errors.js";
 import type { EmbeddingProvider } from "./types.js";
 
@@ -9,24 +10,20 @@ export interface OllamaConfig {
 
 export class OllamaEmbeddingProvider implements EmbeddingProvider {
 	private readonly config: OllamaConfig;
+	private readonly client: Ollama;
 
 	constructor(config: OllamaConfig) {
 		this.config = config;
+		this.client = new Ollama({ host: config.endpoint });
 	}
 
 	async embed(texts: string[]): Promise<number[][]> {
-		const url = `${this.config.endpoint}/api/embed`;
-		let response: Response;
-
 		try {
-			response = await fetch(url, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					model: this.config.model,
-					input: texts,
-				}),
+			const result = await this.client.embed({
+				model: this.config.model,
+				input: texts,
 			});
+			return result.embeddings;
 		} catch (error) {
 			throw new ToolError(
 				`Ollama embedding request failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -37,16 +34,6 @@ export class OllamaEmbeddingProvider implements EmbeddingProvider {
 				},
 			);
 		}
-
-		if (!response.ok) {
-			throw new ToolError(
-				`Ollama embedding API returned ${response.status}: ${await response.text()}`,
-				{ backend: "ollama", operation: "embed" },
-			);
-		}
-
-		const data = (await response.json()) as { embeddings: number[][] };
-		return data.embeddings;
 	}
 
 	dimensions(): number {
