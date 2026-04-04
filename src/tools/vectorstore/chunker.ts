@@ -33,6 +33,9 @@ interface Section {
 
 export class MarkdownChunker {
 	chunk(markdown: string, config: ChunkConfig): ChunkOutput[] {
+		if (config.strategy === "structure" && config.chunk_overlap > 0) {
+			throw new Error("chunk_overlap is not supported with structure chunking strategy");
+		}
 		if (config.strategy === "token") {
 			return this.chunkByTokens(markdown, config);
 		}
@@ -225,12 +228,22 @@ export class MarkdownChunker {
 			if (raw.length === 0) continue;
 
 			const isAtomic = token.type === "code" || token.type === "table";
+			const isList = token.type === "list";
 
 			if (isAtomic) {
 				// Flush current block before atomic content
 				flushBlock();
 				// Atomic content goes as its own block (even if oversized, we don't split it)
 				blocks.push(raw);
+			} else if (isList) {
+				// Flush current block before list content
+				flushBlock();
+				// If list fits, emit as single block; otherwise split at item boundaries
+				if (estimateTokens(raw) > maxChunkTokens) {
+					blocks.push(...this.splitList(raw, maxChunkTokens));
+				} else {
+					blocks.push(raw);
+				}
 			} else {
 				const combined = currentBlock.length > 0 ? `${currentBlock}\n\n${raw}` : raw;
 				if (estimateTokens(combined) > maxChunkTokens && currentBlock.length > 0) {
@@ -244,6 +257,46 @@ export class MarkdownChunker {
 
 		flushBlock();
 		return blocks;
+	}
+
+	private splitList(raw: string, maxChunkTokens: number): string[] {
+		// Split on list item boundaries: lines starting with "- ", "* ", "+ ", or "N. "
+		const lines = raw.split("\n");
+		const items: string[] = [];
+		let currentItem = "";
+
+		for (const line of lines) {
+			const isItemStart = /^(\s*[-*+]\s|\s*\d+\.\s)/.test(line);
+			if (isItemStart && currentItem.length > 0) {
+				items.push(currentItem.trimEnd());
+				currentItem = line;
+			} else {
+				currentItem = currentItem.length > 0 ? `${currentItem}\n${line}` : line;
+			}
+		}
+		if (currentItem.trim().length > 0) {
+			items.push(currentItem.trimEnd());
+		}
+
+		// Group items into chunks that fit within the token budget
+		const result: string[] = [];
+		let current = "";
+
+		for (const item of items) {
+			const candidate = current.length > 0 ? `${current}\n${item}` : item;
+			if (estimateTokens(candidate) > maxChunkTokens && current.length > 0) {
+				result.push(current);
+				current = item;
+			} else {
+				current = candidate;
+			}
+		}
+
+		if (current.trim().length > 0) {
+			result.push(current);
+		}
+
+		return result;
 	}
 
 	private splitAtSentences(text: string, maxChunkTokens: number): string[] {

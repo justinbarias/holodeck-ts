@@ -199,6 +199,27 @@ Content under C.
 			expect(tableChunk?.content).toContain("| 3 | 4 |");
 		});
 
+		it("throws when chunk_overlap > 0 with structure strategy", () => {
+			const md = "# Title\n\nSome content.\n";
+			expect(() =>
+				new MarkdownChunker().chunk(md, {
+					strategy: "structure",
+					max_chunk_tokens: 800,
+					chunk_overlap: 50,
+				}),
+			).toThrow("chunk_overlap is not supported with structure chunking strategy");
+		});
+
+		it("allows chunk_overlap of 0 with structure strategy", () => {
+			const md = "# Title\n\nSome content.\n";
+			const chunks = new MarkdownChunker().chunk(md, {
+				strategy: "structure",
+				max_chunk_tokens: 800,
+				chunk_overlap: 0,
+			});
+			expect(chunks.length).toBeGreaterThan(0);
+		});
+
 		it("splits oversized sections at sentence boundaries", () => {
 			const sentences = Array.from(
 				{ length: 50 },
@@ -218,6 +239,74 @@ Content under C.
 			for (const chunk of contentChunks) {
 				expect(chunk.parent_chain).toEqual(["Big Section"]);
 			}
+		});
+	});
+
+	describe("structure strategy — list splitting", () => {
+		it("splits oversized unordered list at item boundaries", () => {
+			const items = Array.from(
+				{ length: 30 },
+				(_, i) => `- Item number ${i + 1} with enough words to take up tokens in the chunk.`,
+			);
+			const md = `# List Section\n\n${items.join("\n")}\n`;
+
+			const chunks = new MarkdownChunker().chunk(md, {
+				strategy: "structure",
+				max_chunk_tokens: 50,
+				chunk_overlap: 0,
+			});
+
+			const contentChunks = chunks.filter((c) => c.chunk_type === "CONTENT");
+			expect(contentChunks.length).toBeGreaterThan(1);
+
+			// Every content chunk should contain only complete list items
+			for (const chunk of contentChunks) {
+				const lines = chunk.content.split("\n").filter((l) => l.trim().length > 0);
+				for (const line of lines) {
+					expect(line.trimStart().startsWith("- ")).toBe(true);
+				}
+			}
+		});
+
+		it("splits oversized ordered list at item boundaries", () => {
+			const items = Array.from(
+				{ length: 30 },
+				(_, i) => `${i + 1}. Step number ${i + 1} with enough words to take up tokens.`,
+			);
+			const md = `# Steps\n\n${items.join("\n")}\n`;
+
+			const chunks = new MarkdownChunker().chunk(md, {
+				strategy: "structure",
+				max_chunk_tokens: 50,
+				chunk_overlap: 0,
+			});
+
+			const contentChunks = chunks.filter((c) => c.chunk_type === "CONTENT");
+			expect(contentChunks.length).toBeGreaterThan(1);
+
+			// Every content chunk should start with a numbered item
+			for (const chunk of contentChunks) {
+				const lines = chunk.content.split("\n").filter((l) => l.trim().length > 0);
+				// biome-ignore lint/style/noNonNullAssertion: lines is non-empty after filter
+				expect(lines[0]!).toMatch(/^\d+\.\s/);
+			}
+		});
+
+		it("keeps small list as single chunk", () => {
+			const md = `# Short List\n\n- One\n- Two\n- Three\n`;
+
+			const chunks = new MarkdownChunker().chunk(md, {
+				strategy: "structure",
+				max_chunk_tokens: 800,
+				chunk_overlap: 0,
+			});
+
+			const contentChunks = chunks.filter((c) => c.chunk_type === "CONTENT");
+			expect(contentChunks.length).toBe(1);
+			// biome-ignore lint/style/noNonNullAssertion: length === 1 asserted above
+			expect(contentChunks[0]!.content).toContain("- One");
+			// biome-ignore lint/style/noNonNullAssertion: length === 1 asserted above
+			expect(contentChunks[0]!.content).toContain("- Three");
 		});
 	});
 

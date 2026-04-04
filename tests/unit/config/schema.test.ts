@@ -253,6 +253,7 @@ describe("EmbeddingProviderSchema", () => {
 		const result = EmbeddingProviderSchema.safeParse({
 			provider: "ollama",
 			name: "nomic-embed-text",
+			dimensions: 768,
 		});
 		expect(result.success).toBe(true);
 	});
@@ -264,6 +265,7 @@ describe("EmbeddingProviderSchema", () => {
 			endpoint: "https://myinstance.openai.azure.com",
 			api_version: "2024-02-01",
 			api_key: "sk-test",
+			dimensions: 1536,
 		});
 		expect(result.success).toBe(true);
 	});
@@ -272,6 +274,7 @@ describe("EmbeddingProviderSchema", () => {
 		const result = EmbeddingProviderSchema.safeParse({
 			provider: "azure_openai",
 			name: "text-embedding-ada-002",
+			dimensions: 1536,
 		});
 		expect(result.success).toBe(false);
 	});
@@ -280,8 +283,27 @@ describe("EmbeddingProviderSchema", () => {
 		const result = EmbeddingProviderSchema.safeParse({
 			provider: "ollama",
 			name: "nomic-embed-text",
+			dimensions: 768,
 		});
 		expect(result.success).toBe(true);
+	});
+
+	it("rejects config without dimensions", () => {
+		const result = EmbeddingProviderSchema.safeParse({
+			provider: "ollama",
+			name: "nomic-embed-text",
+		});
+		expect(result.success).toBe(false);
+	});
+
+	it("rejects azure_openai without api_key", () => {
+		const result = EmbeddingProviderSchema.safeParse({
+			provider: "azure_openai",
+			name: "text-embedding-ada-002",
+			endpoint: "https://myinstance.openai.azure.com",
+			dimensions: 1536,
+		});
+		expect(result.success).toBe(false);
 	});
 });
 
@@ -388,6 +410,7 @@ describe("AgentConfigSchema embedding_provider", () => {
 			embedding_provider: {
 				provider: "ollama",
 				name: "nomic-embed-text",
+				dimensions: 768,
 			},
 			tools: [
 				{

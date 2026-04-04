@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { ToolError } from "../../../../../src/lib/errors.js";
 import { AzureOpenAIEmbeddingProvider } from "../../../../../src/tools/vectorstore/embeddings/azure-openai.js";
 import { createEmbeddingProvider } from "../../../../../src/tools/vectorstore/embeddings/factory.js";
 import { OllamaEmbeddingProvider } from "../../../../../src/tools/vectorstore/embeddings/ollama.js";
@@ -34,5 +35,27 @@ describe("createEmbeddingProvider", () => {
 			dimensions: 768,
 		});
 		expect(provider).toBeInstanceOf(OllamaEmbeddingProvider);
+	});
+
+	it("throws ToolError when azure_openai is missing endpoint", () => {
+		expect(() =>
+			createEmbeddingProvider({
+				provider: "azure_openai",
+				name: "text-embedding-ada-002",
+				api_key: "sk-test",
+				dimensions: 1536,
+			}),
+		).toThrow(ToolError);
+	});
+
+	it("throws ToolError when azure_openai is missing api_key", () => {
+		expect(() =>
+			createEmbeddingProvider({
+				provider: "azure_openai",
+				name: "text-embedding-ada-002",
+				endpoint: "https://myinstance.openai.azure.com",
+				dimensions: 1536,
+			}),
+		).toThrow(ToolError);
 	});
 });

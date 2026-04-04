@@ -44,17 +44,27 @@ export const EmbeddingProviderSchema = z
 	.strictObject({
 		provider: z.enum(["ollama", "azure_openai"]),
 		name: z.string().min(1),
+		dimensions: z.number().int().positive(),
 		endpoint: z.string().optional(),
 		api_version: z.string().optional(),
 		api_key: z.string().optional(),
 	})
 	.superRefine((value, context) => {
-		if (value.provider === "azure_openai" && !value.endpoint) {
-			context.addIssue({
-				code: "custom",
-				path: ["endpoint"],
-				message: "endpoint is required when provider is 'azure_openai'",
-			});
+		if (value.provider === "azure_openai") {
+			if (!value.endpoint) {
+				context.addIssue({
+					code: "custom",
+					path: ["endpoint"],
+					message: "endpoint is required when provider is 'azure_openai'",
+				});
+			}
+			if (!value.api_key) {
+				context.addIssue({
+					code: "custom",
+					path: ["api_key"],
+					message: "api_key is required when provider is 'azure_openai'",
+				});
+			}
 		}
 	});
 

@@ -1,3 +1,4 @@
+import { ToolError } from "../../../lib/errors.js";
 import { AzureOpenAIEmbeddingProvider } from "./azure-openai.js";
 import { OllamaEmbeddingProvider } from "./ollama.js";
 import type { EmbeddingProvider } from "./types.js";
@@ -20,19 +21,23 @@ export function createEmbeddingProvider(config: EmbeddingProviderConfig): Embedd
 				dimensions: config.dimensions,
 			});
 		case "azure_openai": {
-			const endpoint = config.endpoint;
-			const apiKey = config.api_key;
-			if (!endpoint) {
-				throw new Error("azure_openai embedding provider requires an endpoint");
+			if (!config.endpoint) {
+				throw new ToolError("azure_openai embedding provider requires an endpoint", {
+					backend: "azure_openai",
+					operation: "create",
+				});
 			}
-			if (!apiKey) {
-				throw new Error("azure_openai embedding provider requires an api_key");
+			if (!config.api_key) {
+				throw new ToolError("azure_openai embedding provider requires an api_key", {
+					backend: "azure_openai",
+					operation: "create",
+				});
 			}
 			return new AzureOpenAIEmbeddingProvider({
 				model: config.name,
-				endpoint,
+				endpoint: config.endpoint,
 				apiVersion: config.api_version ?? "2024-02-01",
-				apiKey,
+				apiKey: config.api_key,
 				dimensions: config.dimensions,
 			});
 		}

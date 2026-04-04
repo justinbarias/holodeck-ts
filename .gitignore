@@ -28,3 +28,6 @@ junit.xml
 # Temporary
 tmp/
 *.tmp
+
+# Superpowers plans
+docs/superpowers/
