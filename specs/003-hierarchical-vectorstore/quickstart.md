@@ -56,7 +56,7 @@ tools:
 
 ## 3. Redis Backend
 
-Requires Redis 7+ with RediSearch module.
+Requires Redis 7+ with RediSearch module. Redis 8.4+ enables native hybrid search via `FT.HYBRID` for improved performance; Redis 7+ uses application-level RRF fusion.
 
 ```yaml
 tools:

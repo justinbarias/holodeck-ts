@@ -4,6 +4,11 @@
 
 **Depends on**: tasks-foundation.md (types) + US1 (InMemoryVectorBackend + InMemoryBM25Backend already implemented) + US2 (search works)
 
+**Task Notation:**
+- `[P]` — Parallelizable with other `[P]` tasks in the same section
+- `[Txxx]` or `[Txxx, Tyyy]` — Depends on completion of the listed task(s)
+- `[USn]` — Belongs to user story n
+
 ---
 
 ## Default Config Behavior
@@ -20,9 +25,9 @@
 
 ## Session Lifecycle
 
-- [ ] [T606] [US6] Implement `close()` method on `InMemoryVectorBackend` in `src/tools/vectorstore/backends/in-memory.ts` — clear internal `Map` and reset state to empty
-- [ ] [T607] [US6] Implement `close()` method on `InMemoryBM25Backend` in `src/tools/vectorstore/backends/in-memory.ts` — clear inverted index, document lengths, and all internal state
-- [ ] [T608] [T606, T607] [US6] Add session lifecycle test in `tests/integration/vectorstore-inmemory.test.ts` — create vectorstore, ingest docs, search and verify results found, call `close()` on both backends, create new vectorstore instance, search again and verify zero results returned
+> **Note:** `close()` implementation for InMemoryVectorBackend and InMemoryBM25Backend is in US1 T101 (moved from US6 T606/T607 to fix dependency ordering).
+
+- [ ] [T608] [US6] Add session lifecycle test in `tests/integration/vectorstore-inmemory.test.ts` — create vectorstore, ingest docs, search and verify results found, call `close()` on both backends, create new vectorstore instance, search again and verify zero results returned
 
 ## BM25 Accuracy Validation
 

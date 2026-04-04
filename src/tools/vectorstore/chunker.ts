@@ -1,12 +1,14 @@
+import { getEncoding } from "js-tiktoken";
 import { Lexer, type Token, type Tokens } from "marked";
 import type { DocumentChunk } from "./types.js";
 
-/** Approximate token count using word-count * 0.75 */
+// cl100k_base is a reasonable BPE proxy for chunk sizing — no public Claude tokenizer exists
+const encoder = getEncoding("cl100k_base");
+
+/** Estimate token count using cl100k_base BPE encoding */
 export function estimateTokens(text: string): number {
-	const trimmed = text.trim();
-	if (trimmed.length === 0) return 0;
-	const wordCount = trimmed.split(/\s+/).length;
-	return Math.ceil(wordCount * 0.75);
+	if (text.trim().length === 0) return 0;
+	return encoder.encode(text).length;
 }
 
 export interface ChunkConfig {
@@ -274,24 +276,23 @@ export class MarkdownChunker {
 	}
 
 	private chunkByTokens(markdown: string, config: ChunkConfig): ChunkOutput[] {
-		const words = markdown
-			.trim()
-			.split(/\s+/)
-			.filter((w) => w.length > 0);
-		if (words.length === 0) return [];
+		const trimmed = markdown.trim();
+		if (trimmed.length === 0) return [];
+
+		const tokens = encoder.encode(trimmed);
+		if (tokens.length === 0) return [];
 
 		const chunks: ChunkOutput[] = [];
 		let chunkIndex = 0;
 
-		// Convert token budgets to approximate word counts using the 0.75 token/word ratio.
-		const chunkSize = Math.max(1, Math.floor(config.max_chunk_tokens * 0.75));
-		const overlap = Math.floor(config.chunk_overlap * 0.75);
+		const chunkSize = config.max_chunk_tokens;
+		const overlap = config.chunk_overlap;
 		const step = Math.max(1, chunkSize - overlap);
 		let pos = 0;
 
-		while (pos < words.length) {
-			const end = Math.min(pos + chunkSize, words.length);
-			const content = words.slice(pos, end).join(" ");
+		while (pos < tokens.length) {
+			const end = Math.min(pos + chunkSize, tokens.length);
+			const content = encoder.decode(tokens.slice(pos, end)).trim();
 
 			chunks.push({
 				content,
@@ -300,10 +301,10 @@ export class MarkdownChunker {
 				subsection_ids: [],
 				chunk_type: "CONTENT",
 				chunk_index: chunkIndex++,
-				token_count: estimateTokens(content),
+				token_count: end - pos,
 			});
 
-			if (end >= words.length) break;
+			if (end >= tokens.length) break;
 			pos += step;
 		}
 

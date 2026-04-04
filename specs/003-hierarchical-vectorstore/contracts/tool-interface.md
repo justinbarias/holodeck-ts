@@ -47,6 +47,9 @@ Allowed tools pattern: "mcp__holodeck_vectorstore__{tool.name}"
     {
       "content": "Our refund policy allows returns within 30 days...",
       "score": 0.87,
+      "semantic_score": 0.82,
+      "keyword_score": 0.65,
+      "exact_score": 0.0,
       "source": "policies/refunds.md",
       "breadcrumb": "Policies > Refund Policy > Standard Returns",
       "section_id": "2.1.1",
@@ -64,6 +67,9 @@ Allowed tools pattern: "mcp__holodeck_vectorstore__{tool.name}"
 | `total_results` | `number` | Count of results returned |
 | `results[].content` | `string` | Chunk text (truncated to 500 tokens for token efficiency) |
 | `results[].score` | `number` | Fused relevance score, 0.0-1.0 |
+| `results[].semantic_score` | `number \| undefined` | Semantic similarity score (present when semantic modality executed) |
+| `results[].keyword_score` | `number \| undefined` | BM25/keyword score (present when keyword modality executed) |
+| `results[].exact_score` | `number \| undefined` | Exact match score (present when exact modality executed) |
 | `results[].source` | `string` | Source file path |
 | `results[].breadcrumb` | `string` | Heading hierarchy as `" > "` separated string |
 | `results[].section_id` | `string` | Dot-notation section ID |
@@ -108,7 +114,7 @@ Returned via `CallToolResult` with `isError: true`:
 
 - `breadcrumb` is a flat string (`" > "` separator) instead of nested array — saves ~40% tokens vs JSON array
 - `content` is truncated to 500 tokens max with `...` suffix
-- Individual modality scores (`semantic_score`, `keyword_score`) are omitted from tool output (available internally for logging/telemetry only)
+- Individual modality scores (`semantic_score`, `keyword_score`, `exact_score`) are included in tool output when the corresponding search modality was executed (undefined otherwise) — useful for debugging search relevance
 - No embedding vectors in output
 
 ## Lifecycle

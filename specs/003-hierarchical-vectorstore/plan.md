@@ -102,20 +102,46 @@ src/
 tests/
 ├── unit/
 │   ├── tools/
-│   │   ├── converters.test.ts       # Document format conversion tests
-│   │   ├── chunker.test.ts          # Structure-aware chunking tests
-│   │   ├── search.test.ts           # RRF fusion + hybrid search tests
-│   │   ├── bm25.test.ts             # In-memory BM25 tests
-│   │   └── context-generator.test.ts # Contextual retrieval tests
+│   │   └── vectorstore/
+│   │       ├── converters/
+│   │       │   ├── text.test.ts         # TextConverter tests
+│   │       │   ├── html.test.ts         # HtmlConverter tests
+│   │       │   ├── docx.test.ts         # DocxConverter tests
+│   │       │   ├── pdf.test.ts          # PdfConverter tests
+│   │       │   └── factory.test.ts      # Converter factory tests
+│   │       ├── backends/
+│   │       │   ├── in-memory.test.ts    # InMemoryVector + BM25 tests
+│   │       │   ├── factory.test.ts      # Backend factory tests
+│   │       │   ├── redis.test.ts        # Redis backend tests
+│   │       │   ├── postgres.test.ts     # Postgres backend tests
+│   │       │   ├── chromadb.test.ts     # ChromaDB backend tests
+│   │       │   ├── opensearch.test.ts   # OpenSearch backend tests
+│   │       │   ├── score-normalization.test.ts # Cross-backend score tests
+│   │       │   ├── lifecycle.test.ts    # Connection lifecycle tests
+│   │       │   └── backend-switching.test.ts  # Backend switching tests
+│   │       ├── embeddings/
+│   │       │   ├── ollama.test.ts       # Ollama provider tests
+│   │       │   ├── azure-openai.test.ts # Azure OpenAI provider tests
+│   │       │   └── factory.test.ts      # Embedding factory tests
+│   │       ├── chunker.test.ts          # Structure-aware chunking tests
+│   │       ├── search.test.ts           # RRF fusion + hybrid search tests
+│   │       ├── types.test.ts            # DocumentChunk/SearchResult schema tests
+│   │       ├── discovery.test.ts        # File discovery tests
+│   │       ├── index.test.ts            # Ingestion pipeline tests
+│   │       ├── tool.test.ts             # Tool registration tests
+│   │       ├── bm25.test.ts             # In-memory BM25 scoring tests
+│   │       ├── in-memory-vector.test.ts # Cosine similarity tests
+│   │       └── context-generator.test.ts # Contextual retrieval tests
 │   └── config/
-│       └── schema.test.ts           # Updated schema validation tests
+│       └── schema.test.ts              # Updated schema validation tests
 ├── integration/
-│   ├── vectorstore-inmemory.test.ts  # Full pipeline: ingest → search (in-memory)
-│   ├── vectorstore-redis.test.ts     # Redis backend integration
-│   ├── vectorstore-postgres.test.ts  # Postgres backend integration
-│   └── vectorstore-chromadb.test.ts  # ChromaDB + OpenSearch integration
+│   ├── tools/vectorstore/
+│   │   ├── ingestion.test.ts            # Ingest pipeline integration
+│   │   └── search.test.ts              # Search integration
+│   ├── vectorstore-inmemory.test.ts     # Full pipeline: ingest → search (in-memory)
+│   └── vectorstore-cross-backend.test.ts # Cross-backend comparison tests
 └── fixtures/
-    └── docs/                         # Sample markdown files for testing
+    └── docs/                            # Sample markdown files for testing
 ```
 
 **Structure Decision**: Extends existing `src/tools/` directory with a `vectorstore/` subdirectory. Backend implementations are isolated in `backends/` with a factory pattern. Embedding providers are in `embeddings/`. This keeps the tool self-contained while following the project's established layout.
@@ -172,7 +198,15 @@ Source files (PDF, DOCX, HTML, TXT, MD)
 
 ### 7. Schema Updates
 
-The existing `HierarchicalDocumentToolSchema` in `src/config/schema.ts` needs a new optional `keyword_search` field for ChromaDB's OpenSearch configuration. The `DatabaseSchema` already covers `provider` and `connection_string`.
+The existing `HierarchicalDocumentToolSchema` in `src/config/schema.ts` needs:
+- A new optional `keyword_search` field for ChromaDB's OpenSearch configuration
+- A new optional `context_model` field (default `"claude-haiku-4-5"`) for configurable context generation model — important for non-API-key auth providers (Bedrock, Vertex) where model naming may differ
+
+Additionally, `src/config/schema.ts` needs:
+- A new `EmbeddingProviderSchema` (provider, name, endpoint, api_version, api_key) — currently missing from the schema
+- An `embedding_provider` field on `AgentConfigSchema` (required when vectorstore tools are present)
+
+The `DatabaseSchema` already covers `provider` and `connection_string`.
 
 ## Complexity Tracking
 

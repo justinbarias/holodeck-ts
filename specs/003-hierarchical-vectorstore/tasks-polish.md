@@ -4,6 +4,11 @@
 > **Scope:** OTel observability spans, documentation, and cross-cutting improvements
 > **Depends on:** All user stories complete
 
+**Task Notation:**
+- `[P]` — Parallelizable with other `[P]` tasks in the same section
+- `[Txxx]` or `[Txxx, Tyyy]` — Depends on completion of the listed task(s)
+- `[USn]` — Belongs to user story n
+
 ---
 
 ## OpenTelemetry Spans (Constitution Principle VIII)

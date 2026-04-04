@@ -181,8 +181,7 @@ Converts source documents to Markdown for the chunking pipeline.
 | `PdfConverter` | `.pdf` | `@opendocsg/pdf2md` | Heuristic (font-size based) |
 | `DocxConverter` | `.docx` | `mammoth` + `turndown` | Excellent (semantic styles) |
 | `HtmlConverter` | `.html`, `.htm` | `turndown` | Excellent (DOM structure) |
-| `TextConverter` | `.txt` | Passthrough | None (plain text) |
-| `MarkdownConverter` | `.md` | Identity (no-op) | Perfect (native format) |
+| `TextConverter` | `.txt`, `.md` | Passthrough | None/Perfect (plain text and markdown are passthrough) |
 
 Factory: `getConverter(extension: string): DocumentConverter` returns the appropriate converter or throws `ToolError` for unsupported formats.
 

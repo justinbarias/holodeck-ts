@@ -4,6 +4,11 @@
 
 **Depends on**: tasks-foundation.md (types, schemas) + US1 (backends initialized, documents indexed)
 
+**Task Notation:**
+- `[P]` — Parallelizable with other `[P]` tasks in the same section
+- `[Txxx]` or `[Txxx, Tyyy]` — Depends on completion of the listed task(s)
+- `[USn]` — Belongs to user story n
+
 ---
 
 ## Type Imports & Search-Internal Types
@@ -15,7 +20,7 @@
 
 ## Exact Match Search
 
-- [ ] [T206] [US2] Implement exactMatchSearch(query: string, chunks: IndexedChunk[]) function in `src/tools/vectorstore/search.ts` — case-insensitive substring match across all indexed chunks, returns ExactMatchHit[] with score 1.0 and is_exact_match: true
+- [ ] [T206] [US2] Implement exactMatchSearch(query: string, chunks: DocumentChunk[]) function in `src/tools/vectorstore/search.ts` — case-insensitive substring match across all indexed chunks, returns ExactMatchHit[] with score 1.0 and is_exact_match: true. **Note:** Exact match operates on an in-memory copy of all chunks. Acceptable for target scale (≤1K chunks) but would need backend-native text search for larger corpora
 - [ ] [T207] [US2] Write unit tests for exactMatchSearch in `tests/unit/tools/vectorstore/search.test.ts` — test case-insensitive matching, no-match returns empty, multiple matches ranked by chunk order
 
 ## Search Mode Routing
@@ -35,7 +40,7 @@
 
 ## HybridSearchExecutor
 
-- [ ] [T214] [P] [US2] Implement HybridSearchExecutor class constructor in `src/tools/vectorstore/search.ts` — accepts vector backend, keyword backend, chunk store; stores as private fields
+- [ ] [T214] [P] [US2] Implement HybridSearchExecutor class constructor in `src/tools/vectorstore/search.ts` — accepts vector backend, keyword backend, chunk store (in-memory DocumentChunk[], used for exact match and result hydration; acceptable for ≤1K chunks per plan scope); stores as private fields
 - [ ] [T215] [US2] Implement HybridSearchExecutor.search(query, embedding, options) method in `src/tools/vectorstore/search.ts` — orchestrates full search flow: validate weights → dispatch parallel searches via dispatchSearch → fuse via rrfFuse → apply min_score filter → apply top_k limit → hydrate full SearchResult objects from chunk store → return SearchResponse
 - [ ] [T216] [US2] Implement graceful degradation in HybridSearchExecutor.search in `src/tools/vectorstore/search.ts` — if one modality throws, catch error, continue with remaining modalities, set degraded: true and degraded_details with failure reason on SearchResponse
 - [ ] [T217] [US2] Write unit tests for HybridSearchExecutor.search in `tests/unit/tools/vectorstore/search.test.ts` — test full hybrid flow with mocked backends, min_score filtering, top_k limiting
@@ -50,16 +55,18 @@
 
 ## Tool Output Integration
 
-- [ ] [T223] [US2] Implement toToolResult(response: SearchResponse) in `src/tools/vectorstore/search.ts` — returns CallToolResult { type: "text", text: JSON.stringify(response) } for MCP tool output
+- [ ] [T223] [US2] Implement toToolResult(response: SearchResponse) in `src/tools/vectorstore/search.ts` — returns CallToolResult { type: "text", text: JSON.stringify(response) } for MCP tool output. **Field mapping from internal SearchResult to tool output:** `parent_chain: string[]` → `breadcrumb: string` (joined with `" > "`), `source_path` → `source`, `subsection_ids` omitted from tool output for token efficiency
 - [ ] [T224] [US2] Write unit test for toToolResult in `tests/unit/tools/vectorstore/search.test.ts` — verify JSON output structure matches SearchResponse schema
 
 ## Integration Tests
 
-- [ ] [T225] [US2] Write integration test: Postgres backend indexed docs → hybrid search "What is the refund policy?" → verify results contain relevant chunks with source_path, parent_chain, section_id in `tests/integration/tools/vectorstore/search.test.ts`
-- [ ] [T226] [US2] Write integration test: hybrid mode with semantic_weight: 0.5, keyword_weight: 0.3, exact_weight: 0.2 → verify RRF fusion produces correctly weighted rankings in `tests/integration/tools/vectorstore/search.test.ts`
-- [ ] [T227] [US2] Write integration test: search_mode: "semantic" → verify only vector search dispatched, no keyword/exact calls in `tests/integration/tools/vectorstore/search.test.ts`
-- [ ] [T228] [US2] Write integration test: search_mode: "keyword" → verify only BM25/OpenSearch dispatched in `tests/integration/tools/vectorstore/search.test.ts`
-- [ ] [T229] [US2] Write integration test: exact phrase match → verify result has is_exact_match: true and boosted ranking in `tests/integration/tools/vectorstore/search.test.ts`
+> **Note:** All US2 integration tests use in-memory backends (no external services required). Cross-backend search integration is covered in US5's T520-T525.
+
+- [ ] [T225] [US2] Write integration test: in-memory backend with indexed docs → hybrid search "What is the refund policy?" → verify results contain relevant chunks with source_path, parent_chain, section_id in `tests/integration/tools/vectorstore/search.test.ts`
+- [ ] [T226] [US2] Write integration test: in-memory backend, hybrid mode with semantic_weight: 0.5, keyword_weight: 0.3, exact_weight: 0.2 → verify RRF fusion produces correctly weighted rankings in `tests/integration/tools/vectorstore/search.test.ts`
+- [ ] [T227] [US2] Write integration test: in-memory backend, search_mode: "semantic" → verify only vector search dispatched, no keyword/exact calls in `tests/integration/tools/vectorstore/search.test.ts`
+- [ ] [T228] [US2] Write integration test: in-memory backend, search_mode: "keyword" → verify only BM25 dispatched in `tests/integration/tools/vectorstore/search.test.ts`
+- [ ] [T229] [US2] Write integration test: in-memory backend, exact phrase match → verify result has is_exact_match: true and boosted ranking in `tests/integration/tools/vectorstore/search.test.ts`
 
 ---
 

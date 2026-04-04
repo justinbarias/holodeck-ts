@@ -24,7 +24,7 @@
 ### Key API Patterns
 - **Vector index creation**: `client.ft.create("idx:chunks", { embedding: { type: SCHEMA_FIELD_TYPE.VECTOR, ALGORITHM: SCHEMA_VECTOR_FIELD_ALGORITHM.HNSW, DIM: 768, DISTANCE_METRIC: "COSINE" }, content: { type: SCHEMA_FIELD_TYPE.TEXT } })`
 - **Embedding storage**: `client.hSet("chunk:id", { embedding: Buffer.from(new Float32Array([...]).buffer) })`
-- **Hybrid search**: `client.ft.hybrid("idx:chunks", { SEARCH: { query: "@content:(query)" }, VSIM: { field: "@embedding", vector, method: { type: "KNN", K: 150 } }, COMBINE: { method: { type: "RRF", CONSTANT: 60 } } })`
+- **Hybrid search (Redis 8.4+ native)**: `client.ft.hybrid("idx:chunks", { SEARCH: { query: "@content:(query)" }, VSIM: { field: "@embedding", vector, method: { type: "KNN", K: 150 } }, COMBINE: { method: { type: "RRF", CONSTANT: 60 } } })` — **Note:** `FT.HYBRID` is `@experimental` and requires Redis 8.4+. Implementation supports dual-mode: native `FT.HYBRID` when available, app-level RRF via `search.ts` for Redis 7+. Version detection at `initialize()` determines which path to use.
 - **BM25 search**: `client.ft.search("idx:chunks", "@content:(query)", { LIMIT: { from: 0, size: 10 } })`
 
 ---

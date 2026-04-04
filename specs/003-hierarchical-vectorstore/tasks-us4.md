@@ -2,9 +2,16 @@
 
 > **User Story 4**: Complex markdown documents with nested headings are parsed respecting heading levels, preserving parent chain (ancestor headings), assigning section IDs, splitting at logical boundaries rather than arbitrary token counts.
 >
-> **Depends on**: tasks-foundation.md (chunker already implemented)
+> **Depends on**: tasks-foundation.md (chunker implemented WITH edge cases per T016)
+>
+> **Scope**: Test fixtures and validation tests only. Edge case handling is implemented in foundation T016 to avoid rework. US4 validates correctness via comprehensive test coverage.
 >
 > **Priority**: P2
+
+**Task Notation:**
+- `[P]` — Parallelizable with other `[P]` tasks in the same section
+- `[Txxx]` or `[Txxx, Tyyy]` — Depends on completion of the listed task(s)
+- `[USn]` — Belongs to user story n
 
 ---
 
@@ -19,17 +26,19 @@
 - [ ] [T406] [P] [US4] Create `tests/fixtures/docs/code-and-tables.md` with fenced code blocks and GFM tables that must not be split mid-block
 - [ ] [T407] [P] [US4] Create `tests/fixtures/docs/mixed-content.md` as a realistic complex document combining headings, lists, code blocks, tables, and inline formatting
 
-## Edge Case Handling in Chunker
+## Edge Case Handling
 
-- [ ] [T408] [US4] Handle documents with no headings in `src/tools/vectorstore/chunker.ts` — all content assigned to a root section with empty parent_chain
-- [ ] [T409] [US4] Handle content before the first heading in `src/tools/vectorstore/chunker.ts` — preamble text captured as a root-level chunk
-- [ ] [T410] [US4] Handle deeply nested headings (h1->h2->h3->h4->h5->h6) in `src/tools/vectorstore/chunker.ts` — parent_chain includes all ancestor headings up to h1
-- [ ] [T411] [US4] Handle skipped heading levels (h1->h3, no h2) in `src/tools/vectorstore/chunker.ts` — parent_chain reflects actual headings present, section_id dot-notation still correct
-- [ ] [T412] [US4] Handle empty sections (heading with no body) in `src/tools/vectorstore/chunker.ts` — produce a HEADER-only chunk with no CONTENT chunk following it
-- [ ] [T413] [US4] Handle very long paragraphs exceeding max_chunk_tokens in `src/tools/vectorstore/chunker.ts` — split at sentence boundaries, never mid-word or mid-sentence
-- [ ] [T414] [US4] Preserve code blocks as atomic units in `src/tools/vectorstore/chunker.ts` — fenced code blocks are never split across chunks
-- [ ] [T415] [US4] Preserve GFM tables as atomic units in `src/tools/vectorstore/chunker.ts` — tables are never split across chunks
-- [ ] [T416] [US4] Handle long lists spanning many tokens in `src/tools/vectorstore/chunker.ts` — split between list items, never mid-item
+> **Note:** All edge case handling (T408-T416) has been merged into foundation T016 to avoid rework. The tasks below are retained as a checklist of what T016 must cover. US4's value is in the test fixtures and validation tests that verify correctness.
+
+- [x] ~~[T408] Handle documents with no headings~~ — merged into T016
+- [x] ~~[T409] Handle content before the first heading~~ — merged into T016
+- [x] ~~[T410] Handle deeply nested headings (h1→h6)~~ — merged into T016
+- [x] ~~[T411] Handle skipped heading levels~~ — merged into T016
+- [x] ~~[T412] Handle empty sections~~ — merged into T016
+- [x] ~~[T413] Handle very long paragraphs~~ — merged into T016
+- [x] ~~[T414] Preserve code blocks as atomic units~~ — merged into T016
+- [x] ~~[T415] Preserve GFM tables as atomic units~~ — merged into T016
+- [x] ~~[T416] Handle long lists~~ — merged into T016
 
 ## Validation Tests — Parent Chain and Section IDs
 

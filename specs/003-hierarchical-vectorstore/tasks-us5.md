@@ -1,5 +1,10 @@
 # Tasks — US5: Multiple Backend Support with Unified Interface
 
+**Task Notation:**
+- `[P]` — Parallelizable with other `[P]` tasks in the same section
+- `[Txxx]` or `[Txxx, Tyyy]` — Depends on completion of the listed task(s)
+- `[USn]` — Belongs to user story n
+
 ## Connection Error Handling
 
 - [ ] [T500] [US5] Enhance `initialize()` in `src/tools/vectorstore/backends/redis.ts` to catch connection failures and throw ToolError with backend name "redis", operation "initialize", attempted endpoint from connection string, and guidance "Check that Redis is running and RediSearch module is loaded"
@@ -44,7 +49,7 @@
 - [ ] [T527] [US5] Verify `close()` in `src/tools/vectorstore/backends/postgres.ts` ends the connection pool and handles already-closed state gracefully
 - [ ] [T528] [US5] Verify `close()` in `src/tools/vectorstore/backends/chromadb.ts` is a no-op (HTTP client, no persistent connection) and documents why
 - [ ] [T529] [US5] Verify `close()` in `src/tools/vectorstore/backends/opensearch.ts` closes the OpenSearch client and handles already-closed state gracefully
-- [ ] [T530] [US5] Verify `close()` in `src/tools/vectorstore/backends/in-memory.ts` clears all internal maps and arrays to free memory
+- [ ] [T530] [US5] Verify `close()` in `src/tools/vectorstore/backends/in-memory.ts` (implemented in US1 T101) clears all internal maps and arrays to free memory
 - [ ] [T531] [P] [US5] Add unit tests in `tests/unit/tools/vectorstore/backends/lifecycle.test.ts` verifying `close()` for each backend is idempotent (can be called multiple times without error) and releases resources
 
 ## Checkpoint

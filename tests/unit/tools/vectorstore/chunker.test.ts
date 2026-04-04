@@ -2,8 +2,8 @@ import { describe, expect, it } from "bun:test";
 import { estimateTokens, MarkdownChunker } from "../../../../src/tools/vectorstore/chunker.js";
 
 describe("estimateTokens", () => {
-	it("counts words with 0.75 factor", () => {
-		// "hello world" = 2 words, 2 * 0.75 = 1.5, ceil = 2
+	it("counts tokens using tiktoken", () => {
+		// tiktoken encodes "hello world" as 2 tokens
 		expect(estimateTokens("hello world")).toBe(2);
 	});
 
@@ -16,9 +16,8 @@ describe("estimateTokens", () => {
 	});
 
 	it("handles multi-word content", () => {
-		// 10 words * 0.75 = 7.5, ceil = 8
 		const text = "one two three four five six seven eight nine ten";
-		expect(estimateTokens(text)).toBe(8);
+		expect(estimateTokens(text)).toBe(10);
 	});
 });
 
