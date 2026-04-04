@@ -8,7 +8,7 @@ export const KNOWN_DIMENSIONS: ReadonlyMap<string, number> = new Map([
 	["text-embedding-3-small", 1536],
 	["text-embedding-3-large", 3072],
 	["nomic-embed-text", 768],
-	["qwen3-embedding", 1024],
+	["qwen3-embedding", 4096],
 ]);
 
 export interface EmbeddingProviderConfig {
