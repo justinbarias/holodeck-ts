@@ -21,7 +21,7 @@ instructions:
   inline: You are a helpful research assistant. Use the search tool to find relevant information.
 embedding_provider:
   provider: ollama
-  name: nomic-embed-text
+  name: nomic-embed-text    # dimensions auto-detected (768)
 tools:
   - type: hierarchical_document
     name: search_docs
@@ -141,7 +141,7 @@ tools:
 ```yaml
 embedding_provider:
   provider: azure_openai
-  name: text-embedding-ada-002
+  name: text-embedding-ada-002    # dimensions auto-detected (1536)
   endpoint: ${AZURE_OPENAI_ENDPOINT}
   api_key: ${AZURE_OPENAI_API_KEY}
   api_version: "2024-02-01"

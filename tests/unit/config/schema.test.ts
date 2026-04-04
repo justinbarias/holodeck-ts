@@ -288,12 +288,12 @@ describe("EmbeddingProviderSchema", () => {
 		expect(result.success).toBe(true);
 	});
 
-	it("rejects config without dimensions", () => {
+	it("accepts config without dimensions for known models", () => {
 		const result = EmbeddingProviderSchema.safeParse({
 			provider: "ollama",
 			name: "nomic-embed-text",
 		});
-		expect(result.success).toBe(false);
+		expect(result.success).toBe(true);
 	});
 
 	it("rejects azure_openai without api_key", () => {
@@ -374,6 +374,41 @@ describe("HierarchicalDocumentToolSchema keyword_search", () => {
 		if (result.success) {
 			expect(result.data.context_model).toBe("claude-haiku-4-5");
 		}
+	});
+
+	it("defaults chunk_overlap to 0", () => {
+		const result = HierarchicalDocumentToolSchema.parse({
+			type: "hierarchical_document",
+			name: "test_tool",
+			description: "Test tool",
+			source: "./docs/",
+		});
+		expect(result.chunk_overlap).toBe(0);
+		expect(result.chunking_strategy).toBe("structure");
+	});
+
+	it("rejects chunk_overlap > 0 with structure strategy", () => {
+		const result = HierarchicalDocumentToolSchema.safeParse({
+			type: "hierarchical_document",
+			name: "test_tool",
+			description: "Test tool",
+			source: "./docs/",
+			chunking_strategy: "structure",
+			chunk_overlap: 50,
+		});
+		expect(result.success).toBe(false);
+	});
+
+	it("allows chunk_overlap > 0 with token strategy", () => {
+		const result = HierarchicalDocumentToolSchema.safeParse({
+			type: "hierarchical_document",
+			name: "test_tool",
+			description: "Test tool",
+			source: "./docs/",
+			chunking_strategy: "token",
+			chunk_overlap: 50,
+		});
+		expect(result.success).toBe(true);
 	});
 });
 

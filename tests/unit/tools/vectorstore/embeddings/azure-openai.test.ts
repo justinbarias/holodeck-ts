@@ -46,8 +46,9 @@ describe("AzureOpenAIEmbeddingProvider", () => {
 	});
 
 	it("calls AzureOpenAI SDK with correct parameters", async () => {
+		const mockEmbedding1536 = Array.from({ length: 1536 }, () => 0.1);
 		mockCreate.mockResolvedValueOnce({
-			data: [{ embedding: [0.1], index: 0 }],
+			data: [{ embedding: mockEmbedding1536, index: 0 }],
 		});
 
 		const provider = new AzureOpenAIEmbeddingProvider(baseConfig);

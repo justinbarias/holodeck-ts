@@ -1,4 +1,3 @@
-import type { APIError } from "openai";
 import { AzureOpenAI } from "openai";
 import { ToolError } from "../../../lib/errors.js";
 import type { EmbeddingProvider } from "./types.js";
@@ -14,6 +13,7 @@ export interface AzureOpenAIConfig {
 export class AzureOpenAIEmbeddingProvider implements EmbeddingProvider {
 	private readonly config: AzureOpenAIConfig;
 	private readonly client: AzureOpenAI;
+	private validated = false;
 
 	constructor(config: AzureOpenAIConfig) {
 		this.config = config;
@@ -31,9 +31,26 @@ export class AzureOpenAIEmbeddingProvider implements EmbeddingProvider {
 				input: texts,
 				encoding_format: "float",
 			});
-			return result.data.sort((a, b) => a.index - b.index).map((d) => d.embedding as number[]);
+			const embeddings = result.data
+				.sort((a, b) => a.index - b.index)
+				.map((d) => d.embedding as number[]);
+			if (!this.validated && embeddings.length > 0) {
+				// biome-ignore lint/style/noNonNullAssertion: length checked above
+				const actual = embeddings[0]!.length;
+				if (actual !== this.config.dimensions) {
+					throw new ToolError(
+						`Embedding dimension mismatch for model '${this.config.model}': ` +
+							`configured ${this.config.dimensions}, but model returned ${actual}. ` +
+							`Update 'dimensions' in your embedding_provider config to ${actual}.`,
+						{ backend: "azure_openai", operation: "embed" },
+					);
+				}
+				this.validated = true;
+			}
+			return embeddings;
 		} catch (error) {
-			const apiError = error as APIError;
+			if (error instanceof ToolError) throw error;
+			const apiError = error as { status?: number };
 			const statusInfo = apiError.status ? ` (${apiError.status})` : "";
 			throw new ToolError(
 				`Azure OpenAI embedding request failed${statusInfo}: ${error instanceof Error ? error.message : String(error)}`,

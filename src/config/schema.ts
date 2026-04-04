@@ -44,7 +44,7 @@ export const EmbeddingProviderSchema = z
 	.strictObject({
 		provider: z.enum(["ollama", "azure_openai"]),
 		name: z.string().min(1),
-		dimensions: z.number().int().positive(),
+		dimensions: z.number().int().positive().optional(),
 		endpoint: z.string().optional(),
 		api_version: z.string().optional(),
 		api_key: z.string().optional(),
@@ -78,7 +78,7 @@ export const HierarchicalDocumentToolSchema = z
 		source: z.string().min(1),
 		chunking_strategy: z.enum(["structure", "token"]).default("structure"),
 		max_chunk_tokens: z.number().int().min(100).max(2000).default(800),
-		chunk_overlap: z.number().int().min(0).max(200).default(50),
+		chunk_overlap: z.number().int().min(0).max(200).default(0),
 		search_mode: z.enum(["semantic", "keyword", "exact", "hybrid"]).default("hybrid"),
 		top_k: z.number().int().min(1).max(100).default(10),
 		min_score: z.number().min(0).max(1).optional(),
@@ -102,6 +102,14 @@ export const HierarchicalDocumentToolSchema = z
 					message: "In hybrid mode, semantic_weight + keyword_weight + exact_weight must equal 1.0",
 				});
 			}
+		}
+
+		if (value.chunking_strategy === "structure" && value.chunk_overlap > 0) {
+			context.addIssue({
+				code: "custom",
+				path: ["chunk_overlap"],
+				message: "chunk_overlap must be 0 when chunking_strategy is 'structure'",
+			});
 		}
 
 		if (value.database.provider === "chromadb" && !value.keyword_search) {
