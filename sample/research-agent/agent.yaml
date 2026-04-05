@@ -35,3 +35,15 @@ claude:
   extended_thinking:
     enabled: true
     budget_tokens: 4000
+
+# observability:
+#   enabled: true
+#   service_name: research-agent
+#   logs:
+#     enabled: true
+#     level: INFO
+#   exporters:
+#     otlp:
+#       enabled: true
+#       endpoint: http://localhost:4318
+#       protocol: http

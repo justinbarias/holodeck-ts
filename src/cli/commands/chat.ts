@@ -6,6 +6,7 @@ import type { AgentConfig } from "../../config/schema.js";
 import { loadHolodeckEnv } from "../../lib/env.js";
 import { ConfigError, toErrorMessage } from "../../lib/errors.js";
 import { setupLogging } from "../../lib/logger.js";
+import { shutdownOtel } from "../../otel/setup.js";
 import { launchTUI } from "../tui/app.js";
 
 interface ChatCommandOptions {
@@ -129,17 +130,23 @@ export async function runChatCommand(options: ChatCommandOptions): Promise<void>
 		return;
 	}
 
+	if (config.observability) {
+		await setupLogging({ verbose, tui: isTUI, observability: config.observability });
+	}
+
 	let session: ChatSession;
 	try {
 		session = await createChatSession(config);
 	} catch (error) {
 		writeStderr(`${toErrorMessage(error)}\n`);
 		process.exitCode = 1;
+		await shutdownOtel();
 		return;
 	}
 
 	if (options.prompt !== undefined && options.prompt.trim().length > 0) {
 		await runSingleMessage(session, options.prompt);
+		await shutdownOtel();
 		return;
 	}
 
@@ -148,6 +155,8 @@ export async function runChatCommand(options: ChatCommandOptions): Promise<void>
 	} catch (error) {
 		writeStderr(formatRuntimeErrorMessage(toErrorMessage(error)));
 		process.exitCode = 2;
+	} finally {
+		await shutdownOtel();
 	}
 }
 
