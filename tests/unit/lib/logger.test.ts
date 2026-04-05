@@ -62,6 +62,34 @@ describe("logger", () => {
 		expect(holodeckLogger?.sinks).toContain("otel");
 	});
 
+	it("uses logs.level from observability config when not verbose", async () => {
+		await setupLogging({
+			verbose: false,
+			observability: { enabled: false, logs: { enabled: true, level: "warning" } },
+		});
+		const config = getConfig();
+		const appLoggerConfig = config?.loggers.find((entry) =>
+			Array.isArray(entry.category)
+				? entry.category.join(".") === "holodeck"
+				: entry.category === "holodeck",
+		);
+		expect(appLoggerConfig?.lowestLevel).toBe("warning");
+	});
+
+	it("verbose flag overrides logs.level to debug", async () => {
+		await setupLogging({
+			verbose: true,
+			observability: { enabled: false, logs: { enabled: true, level: "error" } },
+		});
+		const config = getConfig();
+		const appLoggerConfig = config?.loggers.find((entry) =>
+			Array.isArray(entry.category)
+				? entry.category.join(".") === "holodeck"
+				: entry.category === "holodeck",
+		);
+		expect(appLoggerConfig?.lowestLevel).toBe("debug");
+	});
+
 	it("does not add otel sink to logtape category (prevents recursion)", async () => {
 		await setupLogging({
 			verbose: false,

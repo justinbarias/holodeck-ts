@@ -49,12 +49,14 @@ function isOtlpEnabled(obs: ObservabilityConfig | undefined): boolean {
 
 export async function setupLogging(options: LoggingOptions): Promise<void> {
 	const otelFlag = isOtlpEnabled(options.observability) ? "otel" : "none";
-	const key = `${options.verbose}-${options.tui}-${otelFlag}`;
+	const key = `${options.verbose}-${options.tui}-${otelFlag}-${options.observability?.logs?.level ?? "default"}`;
 	if (initialized && initializedKey === key) {
 		return;
 	}
 
-	const appLevel: LogLevel = options.verbose ? "debug" : "info";
+	// Priority: --verbose flag → agent.yaml logs.level → default "info"
+	const configLevel = options.observability?.logs?.level;
+	const appLevel: LogLevel = options.verbose ? "debug" : (configLevel ?? "info");
 
 	const sinks: Record<string, Sink> = options.tui
 		? { file: getFileSink() }

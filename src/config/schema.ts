@@ -198,7 +198,7 @@ export const ExportersSchema = z.strictObject({
 
 export const ObservabilityLogsSchema = z.strictObject({
 	enabled: z.boolean().default(true),
-	level: z.enum(["DEBUG", "INFO", "WARNING", "ERROR"]).default("INFO"),
+	level: z.enum(["debug", "info", "warning", "error"]).default("info"),
 });
 
 export const ObservabilitySchema = z.strictObject({

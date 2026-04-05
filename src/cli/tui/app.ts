@@ -4,6 +4,7 @@ import type { ChatSession, ToolInvocationRecord } from "../../agent/session.js";
 import { closeSession, interruptResponse, sendMessage } from "../../agent/session.js";
 import type { AgentConfig } from "../../config/schema.js";
 import { toErrorMessage } from "../../lib/errors.js";
+import { getModuleLogger } from "../../lib/logger.js";
 import { formatRuntimeErrorMessage } from "../commands/chat.js";
 import { createChatHistory } from "./components/chat-history.js";
 import { createInputBar, setInputValue } from "./components/input-bar.js";
@@ -18,6 +19,8 @@ export function formatToolInspection(invocation: ToolInvocationRecord | null): s
 	const result = invocation.result !== null ? JSON.stringify(invocation.result, null, 2) : "(none)";
 	return `[${invocation.status}] ${invocation.toolName}\nArgs: ${args}\nResult: ${result}`;
 }
+
+const logger = getModuleLogger("cli.tui");
 
 export async function launchTUI(session: ChatSession, config: AgentConfig): Promise<void> {
 	const renderer = await createCliRenderer({
@@ -185,6 +188,7 @@ export async function launchTUI(session: ChatSession, config: AgentConfig): Prom
 				store.setError(formatRuntimeErrorMessage(result.errorMessage ?? "Runtime error"));
 			}
 		} catch (error) {
+			logger.error`Message handling error: ${toErrorMessage(error)}`;
 			store.setError(formatRuntimeErrorMessage(toErrorMessage(error)));
 		}
 
@@ -209,6 +213,7 @@ export async function launchTUI(session: ChatSession, config: AgentConfig): Prom
 	});
 
 	// Start the renderer
+	logger.info`TUI started for agent '${config.name}'`;
 	renderer.start();
 
 	// Keep the process alive until cleanup

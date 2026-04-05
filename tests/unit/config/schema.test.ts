@@ -438,7 +438,7 @@ describe("ObservabilitySchema", () => {
 			exporters: { otlp: {} },
 		});
 		expect(result.logs?.enabled).toBe(true);
-		expect(result.logs?.level).toBe("INFO");
+		expect(result.logs?.level).toBe("info");
 		expect(result.exporters?.otlp?.enabled).toBe(true);
 		expect(result.exporters?.otlp?.endpoint).toBe("http://localhost:4318");
 		expect(result.exporters?.otlp?.protocol).toBe("http");
@@ -466,7 +466,7 @@ describe("ObservabilitySchema", () => {
 	});
 
 	it("accepts all log levels", () => {
-		for (const level of ["DEBUG", "INFO", "WARNING", "ERROR"]) {
+		for (const level of ["debug", "info", "warning", "error"]) {
 			const result = ObservabilitySchema.safeParse({
 				enabled: true,
 				logs: { level },
@@ -478,7 +478,7 @@ describe("ObservabilitySchema", () => {
 	it("rejects invalid log level", () => {
 		const result = ObservabilitySchema.safeParse({
 			enabled: true,
-			logs: { level: "TRACE" },
+			logs: { level: "trace" },
 		});
 		expect(result.success).toBe(false);
 	});
