@@ -122,7 +122,7 @@ describe("createVectorstoreTool", () => {
 		const result = await tool.handler({ query: "nothing here" });
 
 		expect(result.isError).toBeUndefined();
-		const parsed = JSON.parse(result.content[0]?.text ?? "{}") as SearchResponse;
+		const parsed = JSON.parse(result.content[0]?.text ?? "{}");
 		expect(parsed.total_results).toBe(0);
 		expect(parsed.results).toHaveLength(0);
 	});
@@ -177,7 +177,7 @@ describe("createVectorstoreTool", () => {
 		const result = await tool.handler({ query: "degraded" });
 
 		expect(result.isError).toBeUndefined();
-		const parsed = JSON.parse(result.content[0]?.text ?? "{}") as SearchResponse;
+		const parsed = JSON.parse(result.content[0]?.text ?? "{}");
 		expect(parsed.degraded).toBe(true);
 		expect(parsed.degraded_details).toBe("keyword backend unavailable");
 	});

@@ -4,7 +4,7 @@ import { toErrorMessage } from "../../lib/errors.js";
 import { getModuleLogger } from "../../lib/logger.js";
 import { createEmbeddingProvider } from "./embeddings/factory.js";
 import { createVectorstoreServer, type VectorstoreServer } from "./index.js";
-import { vectorstoreInputShape } from "./tool.js";
+import { toToolResult, vectorstoreInputShape } from "./tool.js";
 
 const logger = getModuleLogger("vectorstore.registry");
 
@@ -57,7 +57,7 @@ export function buildVectorstoreServers(
 						search_mode: args.search_mode,
 						min_score: args.min_score,
 					});
-					return { content: [{ type: "text" as const, text: JSON.stringify(response) }] };
+					return toToolResult(response);
 				} catch (err) {
 					return {
 						content: [{ type: "text" as const, text: `Search failed: ${toErrorMessage(err)}` }],

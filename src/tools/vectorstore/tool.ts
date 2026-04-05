@@ -11,6 +11,7 @@ const logger = getModuleLogger("vectorstore.tool");
 // ---------------------------------------------------------------------------
 
 export interface CallToolResult {
+	[key: string]: unknown;
 	content: Array<{ type: "text"; text: string }>;
 	isError?: boolean;
 }
@@ -89,10 +90,8 @@ export function toToolResult(response: SearchResponse): CallToolResult {
 		search_mode: response.search_mode,
 		total_results: response.total_results,
 		results: response.results.map(mapResult),
-		...(response.degraded !== undefined && { degraded: response.degraded }),
-		...(response.degraded_details !== undefined && {
-			degraded_details: response.degraded_details,
-		}),
+		degraded: response.degraded,
+		degraded_details: response.degraded_details,
 	};
 	return {
 		content: [{ type: "text", text: JSON.stringify(mapped) }],
