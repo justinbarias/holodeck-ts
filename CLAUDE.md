@@ -826,6 +826,7 @@ label.content = "updated"; // ✅ Renders immediately
 ## Active Technologies
 - TypeScript 5.8.3 (strict, `@tsconfig/bun`) + `@anthropic-ai/claude-agent-sdk` 0.2.87, `commander` 14.0.3, `zod` 4.3.6, `yaml` 2.8.3, `marked` 15.0.12, `marked-terminal` 7.3.0, `remend` 1.3.0, `logtape` 2.0.5, `@opentui/core` 0.1.93 (001-holodeck-chat)
 - In-memory only (session state, no persistence) (001-holodeck-chat)
+- Redis (RediSearch), Postgres (pgvector + tsvector/GIN), ChromaDB + OpenSearch, in-memory (003-hierarchical-vectorstore)
 
 ## Recent Changes
 - 001-holodeck-chat: Added chat feature dependencies (`marked`, `marked-terminal`, `remend`, `logtape`)

@@ -14,10 +14,20 @@ export class ConfigError extends HoloDeckError {
 	}
 }
 
+export interface ToolErrorOptions extends ErrorOptions {
+	backend?: string;
+	operation?: string;
+}
+
 export class ToolError extends HoloDeckError {
-	constructor(message: string, options?: ErrorOptions) {
+	readonly backend?: string;
+	readonly operation?: string;
+
+	constructor(message: string, options?: ToolErrorOptions) {
 		super(message, options);
 		this.name = "ToolError";
+		this.backend = options?.backend;
+		this.operation = options?.operation;
 	}
 }
 

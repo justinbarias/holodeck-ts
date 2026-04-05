@@ -39,3 +39,34 @@ describe("errors", () => {
 		expect(output.toLowerCase()).toContain("expected number");
 	});
 });
+
+describe("ToolError", () => {
+	it("stores backend and operation fields", () => {
+		const err = new ToolError("connection failed", {
+			backend: "redis",
+			operation: "initialize",
+		});
+		expect(err.message).toBe("connection failed");
+		expect(err.backend).toBe("redis");
+		expect(err.operation).toBe("initialize");
+		expect(err.name).toBe("ToolError");
+	});
+
+	it("works without backend/operation (backward compatible)", () => {
+		const err = new ToolError("generic error");
+		expect(err.message).toBe("generic error");
+		expect(err.backend).toBeUndefined();
+		expect(err.operation).toBeUndefined();
+	});
+
+	it("preserves cause when provided with backend context", () => {
+		const cause = new Error("socket closed");
+		const err = new ToolError("connection failed", {
+			cause,
+			backend: "postgres",
+			operation: "search",
+		});
+		expect(err.cause).toBe(cause);
+		expect(err.backend).toBe("postgres");
+	});
+});

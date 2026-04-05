@@ -7,8 +7,25 @@ model:
   temperature: 0.2
   max_tokens: 4096
 
+embedding_provider:
+  provider: ollama
+  name: qwen3-embedding
+  endpoint: http://localhost:11434
+
 instructions:
   file: ./instructions/system.md
+
+tools:
+  - type: hierarchical_document
+    name: legislation_search
+    description: Search the HR8847 CNIMDT AIGCE Standards Act PDF for legislative details, definitions, requirements, and provisions
+    source: sample/research-agent
+    search_mode: hybrid
+    top_k: 10
+    contextual_embeddings: false
+    database:
+      provider: redis
+      connection_string: redis://localhost:6379
 
 claude:
   working_directory: sample/research-agent

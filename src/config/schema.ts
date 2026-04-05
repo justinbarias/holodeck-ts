@@ -31,6 +31,45 @@ export const ConnectionDatabaseSchema = z.strictObject({
 
 export const DatabaseSchema = z.union([InMemoryDatabaseSchema, ConnectionDatabaseSchema]);
 
+export const KeywordSearchConfigSchema = z.strictObject({
+	provider: z.literal("opensearch"),
+	url: z.string().url(),
+	headers: z.record(z.string(), z.string()).default({}),
+	request_timeout: z.number().positive().default(60),
+});
+
+export type KeywordSearchConfig = z.infer<typeof KeywordSearchConfigSchema>;
+
+export const EmbeddingProviderSchema = z
+	.strictObject({
+		provider: z.enum(["ollama", "azure_openai"]),
+		name: z.string().min(1),
+		dimensions: z.number().int().positive().optional(),
+		endpoint: z.string().optional(),
+		api_version: z.string().optional(),
+		api_key: z.string().optional(),
+	})
+	.superRefine((value, context) => {
+		if (value.provider === "azure_openai") {
+			if (!value.endpoint) {
+				context.addIssue({
+					code: "custom",
+					path: ["endpoint"],
+					message: "endpoint is required when provider is 'azure_openai'",
+				});
+			}
+			if (!value.api_key) {
+				context.addIssue({
+					code: "custom",
+					path: ["api_key"],
+					message: "api_key is required when provider is 'azure_openai'",
+				});
+			}
+		}
+	});
+
+export type EmbeddingProvider = z.infer<typeof EmbeddingProviderSchema>;
+
 export const HierarchicalDocumentToolSchema = z
 	.strictObject({
 		type: z.literal("hierarchical_document"),
@@ -39,7 +78,7 @@ export const HierarchicalDocumentToolSchema = z
 		source: z.string().min(1),
 		chunking_strategy: z.enum(["structure", "token"]).default("structure"),
 		max_chunk_tokens: z.number().int().min(100).max(2000).default(800),
-		chunk_overlap: z.number().int().min(0).max(200).default(50),
+		chunk_overlap: z.number().int().min(0).max(200).default(0),
 		search_mode: z.enum(["semantic", "keyword", "exact", "hybrid"]).default("hybrid"),
 		top_k: z.number().int().min(1).max(100).default(10),
 		min_score: z.number().min(0).max(1).optional(),
@@ -49,19 +88,35 @@ export const HierarchicalDocumentToolSchema = z
 		contextual_embeddings: z.boolean().default(true),
 		context_max_tokens: z.number().int().min(50).max(200).default(100),
 		context_concurrency: z.number().int().min(1).max(50).default(10),
+		context_model: z.string().default("claude-haiku-4-5"),
 		database: DatabaseSchema.default({ provider: "in-memory" }),
+		keyword_search: KeywordSearchConfigSchema.optional(),
 	})
 	.superRefine((value, context) => {
-		if (value.search_mode !== "hybrid") {
-			return;
+		if (value.search_mode === "hybrid") {
+			const totalWeight = value.semantic_weight + value.keyword_weight + value.exact_weight;
+			if (Math.abs(totalWeight - 1) > 1e-6) {
+				context.addIssue({
+					code: "custom",
+					path: ["semantic_weight"],
+					message: "In hybrid mode, semantic_weight + keyword_weight + exact_weight must equal 1.0",
+				});
+			}
 		}
 
-		const totalWeight = value.semantic_weight + value.keyword_weight + value.exact_weight;
-		if (Math.abs(totalWeight - 1) > 1e-6) {
+		if (value.chunking_strategy === "structure" && value.chunk_overlap > 0) {
 			context.addIssue({
 				code: "custom",
-				path: ["semantic_weight"],
-				message: "In hybrid mode, semantic_weight + keyword_weight + exact_weight must equal 1.0",
+				path: ["chunk_overlap"],
+				message: "chunk_overlap must be 0 when chunking_strategy is 'structure'",
+			});
+		}
+
+		if (value.database.provider === "chromadb" && !value.keyword_search) {
+			context.addIssue({
+				code: "custom",
+				path: ["keyword_search"],
+				message: "keyword_search is required when database.provider is 'chromadb'",
 			});
 		}
 	});
@@ -132,6 +187,7 @@ export const AgentConfigSchema = z
 		description: z.string().max(500).optional(),
 		model: LLMProviderSchema,
 		instructions: InstructionsSchema,
+		embedding_provider: EmbeddingProviderSchema.optional(),
 		tools: z.array(ToolSchema).max(50).default([]),
 		claude: ClaudeConfigSchema.optional(),
 	})
@@ -148,6 +204,15 @@ export const AgentConfigSchema = z
 			}
 
 			seen.add(tool.name);
+		}
+
+		const hasVectorstore = value.tools.some((t) => t.type === "hierarchical_document");
+		if (hasVectorstore && !value.embedding_provider) {
+			context.addIssue({
+				code: "custom",
+				path: ["embedding_provider"],
+				message: "embedding_provider is required when using hierarchical_document tools",
+			});
 		}
 	});
 

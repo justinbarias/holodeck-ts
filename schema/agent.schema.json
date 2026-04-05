@@ -33,11 +33,49 @@
 				"$ref": "#/$defs/Tool"
 			}
 		},
+		"embedding_provider": {
+			"$ref": "#/$defs/EmbeddingProvider"
+		},
 		"claude": {
 			"$ref": "#/$defs/ClaudeConfig"
 		}
 	},
 	"$defs": {
+		"EmbeddingProvider": {
+			"type": "object",
+			"description": "Embedding provider configuration. Required when using hierarchical_document tools.",
+			"required": ["provider", "name"],
+			"additionalProperties": false,
+			"properties": {
+				"provider": {
+					"type": "string",
+					"enum": ["ollama", "azure_openai"],
+					"description": "Embedding provider type."
+				},
+				"name": {
+					"type": "string",
+					"minLength": 1,
+					"description": "Embedding model name (e.g. qwen3-embedding, text-embedding-ada-002, nomic-embed-text)."
+				},
+				"dimensions": {
+					"type": "integer",
+					"exclusiveMinimum": 0,
+					"description": "Embedding dimensions. Auto-detected for known models."
+				},
+				"endpoint": {
+					"type": "string",
+					"description": "Provider endpoint URL. Required for azure_openai, defaults to http://localhost:11434 for ollama."
+				},
+				"api_version": {
+					"type": "string",
+					"description": "API version (azure_openai only)."
+				},
+				"api_key": {
+					"type": "string",
+					"description": "API key. Required for azure_openai. Prefer environment variables."
+				}
+			}
+		},
 		"LLMProvider": {
 			"type": "object",
 			"description": "LLM model configuration.",

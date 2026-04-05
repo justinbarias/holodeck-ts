@@ -11,6 +11,10 @@ import { ConfigError, toErrorMessage } from "../lib/errors.js";
 import { getModuleLogger } from "../lib/logger.js";
 import { buildMCPServers } from "../tools/mcp.js";
 import type { Skill } from "../tools/skills.js";
+import {
+	buildVectorstoreServers,
+	type VectorstoreRegistryResult,
+} from "../tools/vectorstore/registry.js";
 import { buildHooks } from "./hooks.js";
 import { createPermissionHandler, type PromptFn } from "./permissions.js";
 import type { ChatEvent, SessionState } from "./streaming.js";
@@ -36,6 +40,7 @@ export interface ChatSession {
 	query: Query | null;
 	lastToolInvocation: ToolInvocationRecord | null;
 	contextUsage: SDKControlGetContextUsageResponse | null;
+	vectorstoreServers: VectorstoreRegistryResult["servers"];
 	skills: Skill[];
 	contextWarningShown: boolean;
 	onCompactionStart?: () => void;
@@ -100,7 +105,9 @@ export function mapThinkingConfig(extendedThinking?: ExtendedThinking): Thinking
 
 export async function createChatSession(config: AgentConfig): Promise<ChatSession> {
 	const systemPrompt = await resolveSystemPrompt(config);
-	const mcpServers = buildMCPServers(config.tools);
+	const { mcpServers: vectorstoreMcpServers, servers: vectorstoreServers } =
+		buildVectorstoreServers(config);
+	const mcpServers = { ...buildMCPServers(config.tools), ...vectorstoreMcpServers };
 
 	sessionLogger.info("Chat session created for agent {name}.", {
 		name: config.name,
@@ -115,6 +122,7 @@ export async function createChatSession(config: AgentConfig): Promise<ChatSessio
 		query: null,
 		lastToolInvocation: null,
 		contextUsage: null,
+		vectorstoreServers,
 		skills: [],
 		contextWarningShown: false,
 	};
@@ -258,6 +266,16 @@ export async function closeSession(session: ChatSession): Promise<void> {
 
 	session.state = "shutting_down";
 	sessionLogger.info("Closing chat session.");
+
+	for (const server of session.vectorstoreServers) {
+		try {
+			await server.close();
+		} catch (error) {
+			sessionLogger.error("Error closing vectorstore server: {error}", {
+				error: toErrorMessage(error),
+			});
+		}
+	}
 
 	try {
 		if (session.query) {

@@ -4,11 +4,19 @@ import { resolve } from "node:path";
 
 const CLI_PATH = resolve(import.meta.dir, "../../../src/cli/index.ts");
 const FIXTURE_PATH = resolve(import.meta.dir, "../../fixtures/agents/e2e-minimal.yaml");
+const VECTORSTORE_FIXTURE_PATH = resolve(
+	import.meta.dir,
+	"../../fixtures/agents/e2e-vectorstore.yaml",
+);
 
 const hasCredentials = Boolean(
 	process.env.CLAUDE_CODE_OAUTH_TOKEN ||
 		process.env.ANTHROPIC_API_KEY ||
 		process.env.ANTHROPIC_BASE_URL,
+);
+
+const hasOllama = Boolean(
+	process.env.OLLAMA_EMBEDDING_ENDPOINT && process.env.OLLAMA_EMBEDDING_MODEL,
 );
 
 async function runCli(
@@ -90,4 +98,20 @@ describe.skipIf(!hasCredentials)("holodeck chat e2e", () => {
 		expect(exitCode).toBe(0);
 		expect(stdout.trim().length).toBeGreaterThan(0);
 	}, 30_000);
+});
+
+describe.skipIf(!hasCredentials || !hasOllama)("holodeck chat e2e (vectorstore)", () => {
+	it("searches vectorstore and returns results", async () => {
+		const { exitCode, stdout, stderr } = await runCli([
+			"chat",
+			"--agent",
+			VECTORSTORE_FIXTURE_PATH,
+			"-p",
+			"What does the documentation say about PostgreSQL?",
+		]);
+
+		expect(exitCode).toBe(0);
+		expect(stdout).toContain("VECTORSTORE_E2E_OK");
+		expect(stderr).not.toContain("Error:");
+	}, 120_000);
 });
