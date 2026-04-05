@@ -3,10 +3,11 @@ import postgres from "postgres";
 import { ToolError } from "../../../lib/errors.js";
 import { getModuleLogger } from "../../../lib/logger.js";
 import type {
-	IndexableChunk,
-	IndexableTextChunk,
+	ExactMatchHit,
+	IndexableDocument,
 	KeywordSearchBackend,
 	KeywordSearchHit,
+	StoredDocument,
 	VectorSearchHit,
 	VectorStoreBackend,
 } from "./types.js";
@@ -102,6 +103,15 @@ export class PostgresVectorBackend implements VectorStoreBackend {
 				USING hnsw (embedding vector_cosine_ops)
 			`;
 
+			// Manifest metadata table
+			const metaTableName = `${tableName}__meta`;
+			await this.sql`
+				CREATE TABLE IF NOT EXISTS ${this.sql(metaTableName)} (
+					key TEXT PRIMARY KEY,
+					value TEXT NOT NULL
+				)
+			`;
+
 			logger.info`Postgres vector backend initialized`;
 		} catch (err) {
 			throw new ToolError(
@@ -115,20 +125,19 @@ export class PostgresVectorBackend implements VectorStoreBackend {
 		}
 	}
 
-	async upsert(chunks: IndexableChunk[]): Promise<void> {
-		if (chunks.length === 0) return;
+	async upsert(docs: IndexableDocument[]): Promise<void> {
+		if (docs.length === 0) return;
 		const { tableName } = this.config;
-		logger.debug`Upserting ${chunks.length} chunks into ${tableName}`;
+		logger.debug`Upserting ${docs.length} chunks into ${tableName}`;
 		try {
-			// Build rows as plain objects; postgres will serialize them
-			const rows = chunks.map((c) => ({
+			const rows = docs.map((c) => ({
 				id: c.id,
 				content: c.content,
 				metadata: JSON.stringify(c.metadata),
 				embedding: toSql(c.embedding) as string,
 			}));
 
-			// Upsert via INSERT … ON CONFLICT DO UPDATE
+			// Upsert via INSERT ... ON CONFLICT DO UPDATE
 			for (const row of rows) {
 				await this.sql`
 					INSERT INTO ${this.sql(tableName)} (id, content, metadata, embedding)
@@ -150,6 +159,75 @@ export class PostgresVectorBackend implements VectorStoreBackend {
 				{
 					backend: "postgres-vector",
 					operation: "upsert",
+					cause: err instanceof Error ? err : undefined,
+				},
+			);
+		}
+	}
+
+	async retrieve(ids: string[]): Promise<Map<string, StoredDocument>> {
+		const { tableName } = this.config;
+		const result = new Map<string, StoredDocument>();
+		if (ids.length === 0) return result;
+
+		try {
+			const rows = await this.sql<
+				{ id: string; content: string; metadata: Record<string, unknown> }[]
+			>`
+				SELECT id, content, metadata
+				FROM ${this.sql(tableName)}
+				WHERE id = ANY(${ids}::text[])
+			`;
+			for (const row of rows) {
+				result.set(row.id, { id: row.id, content: row.content, metadata: row.metadata });
+			}
+		} catch (err) {
+			throw new ToolError(
+				`Failed to retrieve documents from '${tableName}': ${err instanceof Error ? err.message : String(err)}`,
+				{
+					backend: "postgres-vector",
+					operation: "retrieve",
+					cause: err instanceof Error ? err : undefined,
+				},
+			);
+		}
+
+		return result;
+	}
+
+	async getManifest(key: string): Promise<string | null> {
+		const metaTable = `${this.config.tableName}__meta`;
+		try {
+			const rows = await this.sql<{ value: string }[]>`
+				SELECT value FROM ${this.sql(metaTable)} WHERE key = ${key}
+			`;
+			return rows.length > 0 ? rows[0]!.value : null;
+		} catch (err) {
+			throw new ToolError(
+				`Failed to get manifest key '${key}' from '${metaTable}': ${err instanceof Error ? err.message : String(err)}`,
+				{
+					backend: "postgres-vector",
+					operation: "getManifest",
+					cause: err instanceof Error ? err : undefined,
+				},
+			);
+		}
+	}
+
+	async setManifest(key: string, value: string): Promise<void> {
+		const metaTable = `${this.config.tableName}__meta`;
+		try {
+			await this.sql`
+				INSERT INTO ${this.sql(metaTable)} (key, value)
+				VALUES (${key}, ${value})
+				ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+			`;
+		} catch (err) {
+			throw new ToolError(
+				`Failed to set manifest key '${key}' in '${metaTable}': ${err instanceof Error ? err.message : String(err)}`,
+				{
+					backend: "postgres-vector",
+					operation: "setManifest",
 					cause: err instanceof Error ? err : undefined,
 				},
 			);
@@ -287,14 +365,14 @@ export class PostgresFTSBackend implements KeywordSearchBackend {
 		}
 	}
 
-	async index(chunks: IndexableTextChunk[]): Promise<void> {
-		if (chunks.length === 0) return;
+	async index(docs: IndexableDocument[]): Promise<void> {
+		if (docs.length === 0) return;
 		const { tableName } = this;
-		logger.debug`Indexing ${chunks.length} text chunks into ${tableName}`;
+		logger.debug`Indexing ${docs.length} text chunks into ${tableName}`;
 		try {
 			// The tsvector column is GENERATED ALWAYS so we only need the
 			// base columns; the FTS column is computed automatically.
-			for (const chunk of chunks) {
+			for (const chunk of docs) {
 				await this.sql`
 					INSERT INTO ${this.sql(tableName)} (id, content, metadata, embedding)
 					VALUES (
@@ -348,6 +426,28 @@ export class PostgresFTSBackend implements KeywordSearchBackend {
 				{
 					backend: "postgres-fts",
 					operation: "search",
+					cause: err instanceof Error ? err : undefined,
+				},
+			);
+		}
+	}
+
+	async exactMatch(query: string, topK: number): Promise<ExactMatchHit[]> {
+		const { tableName } = this;
+		try {
+			const rows = await this.sql<{ id: string; content: string }[]>`
+				SELECT id, content
+				FROM ${this.sql(tableName)}
+				WHERE content ILIKE ${"%" + query + "%"}
+				LIMIT ${topK}
+			`;
+			return rows.map((r) => ({ id: r.id, content: r.content }));
+		} catch (err) {
+			throw new ToolError(
+				`Exact match search failed on table '${tableName}': ${err instanceof Error ? err.message : String(err)}`,
+				{
+					backend: "postgres-fts",
+					operation: "exactMatch",
 					cause: err instanceof Error ? err : undefined,
 				},
 			);

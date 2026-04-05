@@ -70,11 +70,13 @@ describe("discoverFiles", () => {
 			// Should find all 7 supported files (6 root + 1 nested)
 			expect(files.length).toBe(7);
 
-			// Each result includes a path, extension, and modifiedAt
+			// Each result includes a path, extension, modifiedAt, and sha256
 			for (const file of files) {
 				expect(typeof file.path).toBe("string");
 				expect(typeof file.extension).toBe("string");
 				expect(file.modifiedAt).toBeInstanceOf(Date);
+				expect(typeof file.sha256).toBe("string");
+				expect(file.sha256.length).toBeGreaterThan(0);
 			}
 		});
 

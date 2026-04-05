@@ -19,7 +19,7 @@ export interface ChunkConfig {
 
 type ChunkOutput = Omit<
 	DocumentChunk,
-	"embedding" | "id" | "document_id" | "source_path" | "file_modified_at"
+	"embedding" | "id" | "document_id" | "source_path" | "sha256"
 >;
 
 interface Section {

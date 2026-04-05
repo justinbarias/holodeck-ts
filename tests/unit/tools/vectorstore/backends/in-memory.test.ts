@@ -197,6 +197,42 @@ describe("InMemoryVectorBackend", () => {
 		const hits = await backend.search(basisVector(4, 0), 10);
 		expect(hits).toEqual([]);
 	});
+
+	// --- retrieve ---
+
+	it("retrieves stored documents by id", async () => {
+		const backend = new InMemoryVectorBackend(cfg);
+		await backend.initialize();
+		await backend.upsert([
+			{ id: "doc1", content: "hello", embedding: basisVector(4, 0), metadata: { key: "val" } },
+			{ id: "doc2", content: "world", embedding: basisVector(4, 1), metadata: {} },
+		]);
+		const docs = await backend.retrieve(["doc1", "doc2", "missing"]);
+		expect(docs.size).toBe(2);
+		expect(docs.get("doc1")?.content).toBe("hello");
+		expect(docs.get("doc1")?.metadata).toEqual({ key: "val" });
+		expect(docs.get("doc2")?.content).toBe("world");
+		expect(docs.has("missing")).toBe(false);
+	});
+
+	// --- manifest ---
+
+	it("stores and retrieves manifest data", async () => {
+		const backend = new InMemoryVectorBackend(cfg);
+		await backend.initialize();
+		expect(await backend.getManifest("key1")).toBeNull();
+		await backend.setManifest("key1", '{"test":true}');
+		expect(await backend.getManifest("key1")).toBe('{"test":true}');
+	});
+
+	it("clears manifest on close", async () => {
+		const backend = new InMemoryVectorBackend(cfg);
+		await backend.initialize();
+		await backend.setManifest("key1", "value");
+		await backend.close();
+		await backend.initialize();
+		expect(await backend.getManifest("key1")).toBeNull();
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -223,7 +259,7 @@ describe("InMemoryBM25Backend", () => {
 	it("returns empty results for a query with no matching terms", async () => {
 		const backend = new InMemoryBM25Backend(cfg);
 		await backend.initialize();
-		await backend.index([{ id: "d1", content: "hello world", metadata: {} }]);
+		await backend.index([{ id: "d1", content: "hello world", embedding: [], metadata: {} }]);
 		const hits = await backend.search("xyz", 10);
 		expect(hits).toEqual([]);
 	});
@@ -231,16 +267,16 @@ describe("InMemoryBM25Backend", () => {
 	it("returns empty results for an empty query", async () => {
 		const backend = new InMemoryBM25Backend(cfg);
 		await backend.initialize();
-		await backend.index([{ id: "d1", content: "hello world", metadata: {} }]);
+		await backend.index([{ id: "d1", content: "hello world", embedding: [], metadata: {} }]);
 		const hits = await backend.search("   ", 10);
 		expect(hits).toEqual([]);
 	});
 
 	it("throws when index is called before initialize", async () => {
 		const backend = new InMemoryBM25Backend(cfg);
-		await expect(backend.index([{ id: "a", content: "x", metadata: {} }])).rejects.toThrow(
-			"initialize",
-		);
+		await expect(
+			backend.index([{ id: "a", content: "x", embedding: [], metadata: {} }]),
+		).rejects.toThrow("initialize");
 	});
 
 	it("throws when search is called before initialize", async () => {
@@ -258,7 +294,7 @@ describe("InMemoryBM25Backend", () => {
 	it("indexes a document and retrieves it for an exact term match", async () => {
 		const backend = new InMemoryBM25Backend(cfg);
 		await backend.initialize();
-		await backend.index([{ id: "doc1", content: "hello world", metadata: {} }]);
+		await backend.index([{ id: "doc1", content: "hello world", embedding: [], metadata: {} }]);
 		const hits = await backend.search("hello", 10);
 		expect(hits).toHaveLength(1);
 		expect(hits[0]?.id).toBe("doc1");
@@ -268,8 +304,8 @@ describe("InMemoryBM25Backend", () => {
 		const backend = new InMemoryBM25Backend(cfg);
 		await backend.initialize();
 		await backend.index([
-			{ id: "d1", content: "typescript type safety", metadata: {} },
-			{ id: "d2", content: "typescript programming language", metadata: {} },
+			{ id: "d1", content: "typescript type safety", embedding: [], metadata: {} },
+			{ id: "d2", content: "typescript programming language", embedding: [], metadata: {} },
 		]);
 		const hits = await backend.search("typescript", 10);
 		expect(hits[0]?.score).toBeCloseTo(1, 5);
@@ -280,8 +316,8 @@ describe("InMemoryBM25Backend", () => {
 		await backend.initialize();
 		// d1 mentions the term once, d2 mentions it three times
 		await backend.index([
-			{ id: "d1", content: "apple banana cherry", metadata: {} },
-			{ id: "d2", content: "apple apple apple banana", metadata: {} },
+			{ id: "d1", content: "apple banana cherry", embedding: [], metadata: {} },
+			{ id: "d2", content: "apple apple apple banana", embedding: [], metadata: {} },
 		]);
 		const hits = await backend.search("apple", 10);
 		expect(hits[0]?.id).toBe("d2");
@@ -291,9 +327,9 @@ describe("InMemoryBM25Backend", () => {
 		const backend = new InMemoryBM25Backend(cfg);
 		await backend.initialize();
 		await backend.index([
-			{ id: "d1", content: "machine learning models", metadata: {} },
-			{ id: "d2", content: "deep learning neural networks machine", metadata: {} },
-			{ id: "d3", content: "relational database sql", metadata: {} },
+			{ id: "d1", content: "machine learning models", embedding: [], metadata: {} },
+			{ id: "d2", content: "deep learning neural networks machine", embedding: [], metadata: {} },
+			{ id: "d3", content: "relational database sql", embedding: [], metadata: {} },
 		]);
 		const hits = await backend.search("machine learning", 10);
 		const ids = hits.map((h) => h.id);
@@ -307,7 +343,7 @@ describe("InMemoryBM25Backend", () => {
 	it("is case-insensitive", async () => {
 		const backend = new InMemoryBM25Backend(cfg);
 		await backend.initialize();
-		await backend.index([{ id: "d1", content: "Hello World", metadata: {} }]);
+		await backend.index([{ id: "d1", content: "Hello World", embedding: [], metadata: {} }]);
 		const hitsLower = await backend.search("hello", 10);
 		const hitsUpper = await backend.search("HELLO", 10);
 		expect(hitsLower).toHaveLength(1);
@@ -320,7 +356,9 @@ describe("InMemoryBM25Backend", () => {
 		const backend = new InMemoryBM25Backend(cfg);
 		await backend.initialize();
 		for (let i = 0; i < 5; i++) {
-			await backend.index([{ id: `d${i}`, content: `common term doc${i}`, metadata: {} }]);
+			await backend.index([
+				{ id: `d${i}`, content: `common term doc${i}`, embedding: [], metadata: {} },
+			]);
 		}
 		const hits = await backend.search("common", 2);
 		expect(hits).toHaveLength(2);
@@ -329,8 +367,8 @@ describe("InMemoryBM25Backend", () => {
 	it("upserts (re-indexes) an existing document by id", async () => {
 		const backend = new InMemoryBM25Backend(cfg);
 		await backend.initialize();
-		await backend.index([{ id: "d1", content: "old content alpha", metadata: {} }]);
-		await backend.index([{ id: "d1", content: "new content beta", metadata: {} }]);
+		await backend.index([{ id: "d1", content: "old content alpha", embedding: [], metadata: {} }]);
+		await backend.index([{ id: "d1", content: "new content beta", embedding: [], metadata: {} }]);
 
 		// "alpha" should no longer match
 		const alphaHits = await backend.search("alpha", 10);
@@ -347,8 +385,8 @@ describe("InMemoryBM25Backend", () => {
 		const backend = new InMemoryBM25Backend(cfg);
 		await backend.initialize();
 		await backend.index([
-			{ id: "d1", content: "remove me please", metadata: {} },
-			{ id: "d2", content: "keep me here", metadata: {} },
+			{ id: "d1", content: "remove me please", embedding: [], metadata: {} },
+			{ id: "d2", content: "keep me here", embedding: [], metadata: {} },
 		]);
 		await backend.delete(["d1"]);
 		const hits = await backend.search("remove", 10);
@@ -365,9 +403,9 @@ describe("InMemoryBM25Backend", () => {
 		const backend = new InMemoryBM25Backend(cfg);
 		await backend.initialize();
 		await backend.index([
-			{ id: "d1", content: "shared term alpha", metadata: {} },
-			{ id: "d2", content: "shared term beta", metadata: {} },
-			{ id: "d3", content: "shared term gamma", metadata: {} },
+			{ id: "d1", content: "shared term alpha", embedding: [], metadata: {} },
+			{ id: "d2", content: "shared term beta", embedding: [], metadata: {} },
+			{ id: "d3", content: "shared term gamma", embedding: [], metadata: {} },
 		]);
 		await backend.delete(["d1", "d2"]);
 		const hits = await backend.search("shared", 10);
@@ -382,8 +420,8 @@ describe("InMemoryBM25Backend", () => {
 		const backend = new InMemoryBM25Backend(cfg);
 		await backend.initialize();
 		await backend.index([
-			{ id: "d1", content: "unique word here", metadata: {} },
-			{ id: "d2", content: "unique word there", metadata: {} },
+			{ id: "d1", content: "unique word here", embedding: [], metadata: {} },
+			{ id: "d2", content: "unique word there", embedding: [], metadata: {} },
 		]);
 		await backend.delete(["d2"]);
 		const hits = await backend.search("unique", 10);
@@ -397,7 +435,7 @@ describe("InMemoryBM25Backend", () => {
 	it("close clears all state", async () => {
 		const backend = new InMemoryBM25Backend(cfg);
 		await backend.initialize();
-		await backend.index([{ id: "d1", content: "hello world", metadata: {} }]);
+		await backend.index([{ id: "d1", content: "hello world", embedding: [], metadata: {} }]);
 		await backend.close();
 		await expect(backend.search("hello", 10)).rejects.toThrow("initialize");
 	});
@@ -412,10 +450,50 @@ describe("InMemoryBM25Backend", () => {
 	it("can reinitialize after close and starts fresh", async () => {
 		const backend = new InMemoryBM25Backend(cfg);
 		await backend.initialize();
-		await backend.index([{ id: "d1", content: "old content", metadata: {} }]);
+		await backend.index([{ id: "d1", content: "old content", embedding: [], metadata: {} }]);
 		await backend.close();
 		await backend.initialize();
 		const hits = await backend.search("old", 10);
 		expect(hits).toEqual([]);
+	});
+
+	// --- exactMatch ---
+
+	it("finds exact substring matches", async () => {
+		const backend = new InMemoryBM25Backend(cfg);
+		await backend.initialize();
+		await backend.index([
+			{ id: "d1", content: "The quick brown fox", embedding: [], metadata: {} },
+			{ id: "d2", content: "A lazy dog sleeps", embedding: [], metadata: {} },
+			{ id: "d3", content: "The fox is quick", embedding: [], metadata: {} },
+		]);
+		const hits = await backend.exactMatch("quick", 10);
+		expect(hits).toHaveLength(2);
+		const ids = hits.map((h) => h.id);
+		expect(ids).toContain("d1");
+		expect(ids).toContain("d3");
+	});
+
+	it("exactMatch is case-insensitive", async () => {
+		const backend = new InMemoryBM25Backend(cfg);
+		await backend.initialize();
+		await backend.index([
+			{ id: "d1", content: "TypeScript is Great", embedding: [], metadata: {} },
+		]);
+		const hits = await backend.exactMatch("typescript", 10);
+		expect(hits).toHaveLength(1);
+		expect(hits[0]?.content).toBe("TypeScript is Great");
+	});
+
+	it("exactMatch respects topK", async () => {
+		const backend = new InMemoryBM25Backend(cfg);
+		await backend.initialize();
+		for (let i = 0; i < 5; i++) {
+			await backend.index([
+				{ id: `d${i}`, content: `common word doc${i}`, embedding: [], metadata: {} },
+			]);
+		}
+		const hits = await backend.exactMatch("common", 2);
+		expect(hits).toHaveLength(2);
 	});
 });

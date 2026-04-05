@@ -3,10 +3,11 @@ import { createClient } from "redis";
 import { ToolError } from "../../../lib/errors.js";
 import { getModuleLogger } from "../../../lib/logger.js";
 import type {
-	IndexableChunk,
-	IndexableTextChunk,
+	ExactMatchHit,
+	IndexableDocument,
 	KeywordSearchBackend,
 	KeywordSearchHit,
+	StoredDocument,
 	VectorSearchHit,
 	VectorStoreBackend,
 } from "./types.js";
@@ -131,20 +132,20 @@ export class RedisVectorBackend implements VectorStoreBackend {
 		await this.ensureIndex();
 	}
 
-	async upsert(chunks: IndexableChunk[]): Promise<void> {
+	async upsert(docs: IndexableDocument[]): Promise<void> {
 		const client = this.getClient();
-		if (chunks.length === 0) return;
+		if (docs.length === 0) return;
 
 		try {
 			const pipeline = client.multi();
-			for (const chunk of chunks) {
-				const key = `${this.prefix}${chunk.id}`;
-				const embeddingBuffer = embeddingToBuffer(chunk.embedding);
-				const metaJson = JSON.stringify(chunk.metadata);
+			for (const doc of docs) {
+				const key = `${this.prefix}${doc.id}`;
+				const embeddingBuffer = embeddingToBuffer(doc.embedding);
+				const metaJson = JSON.stringify(doc.metadata);
 
 				pipeline.hSet(key, {
-					id: chunk.id,
-					content: chunk.content,
+					id: doc.id,
+					content: doc.content,
 					embedding: embeddingBuffer,
 					metadata: metaJson,
 				});
@@ -152,13 +153,13 @@ export class RedisVectorBackend implements VectorStoreBackend {
 			await pipeline.exec();
 		} catch (err) {
 			throw new ToolError(
-				`Redis upsert failed for ${chunks.length} chunk(s). ` +
+				`Redis upsert failed for ${docs.length} chunk(s). ` +
 					"Check your Redis connection and available memory.",
 				{ backend: "redis", operation: "upsert", cause: err instanceof Error ? err : undefined },
 			);
 		}
 
-		logger.debug`Upserted ${chunks.length} chunks into index '${this.config.indexName}'`;
+		logger.debug`Upserted ${docs.length} chunks into index '${this.config.indexName}'`;
 	}
 
 	async search(embedding: number[], topK: number): Promise<VectorSearchHit[]> {
@@ -190,6 +191,64 @@ export class RedisVectorBackend implements VectorStoreBackend {
 			const score = Math.max(0, Math.min(1, 1 - rawScore / 2));
 			return { id: doc.id.slice(this.prefix.length), score };
 		});
+	}
+
+	async retrieve(ids: string[]): Promise<Map<string, StoredDocument>> {
+		const client = this.getClient();
+		const result = new Map<string, StoredDocument>();
+		if (ids.length === 0) return result;
+
+		try {
+			const pipeline = client.multi();
+			for (const id of ids) {
+				pipeline.hGetAll(`${this.prefix}${id}`);
+			}
+			const replies = await pipeline.exec();
+
+			for (let i = 0; i < ids.length; i++) {
+				const id = ids[i]!;
+				const hash = replies[i] as unknown as Record<string, string> | null;
+				if (!hash || !hash.content) continue;
+				const metadata = hash.metadata
+					? (JSON.parse(hash.metadata) as Record<string, unknown>)
+					: {};
+				result.set(id, { id, content: hash.content, metadata });
+			}
+		} catch (err) {
+			throw new ToolError(
+				`Redis retrieve failed for ${ids.length} id(s). Check your Redis connection.`,
+				{ backend: "redis", operation: "retrieve", cause: err instanceof Error ? err : undefined },
+			);
+		}
+
+		return result;
+	}
+
+	async getManifest(key: string): Promise<string | null> {
+		const client = this.getClient();
+		try {
+			const val = await client.hGet("__holodeck_meta__", key);
+			return val ?? null;
+		} catch (err) {
+			throw new ToolError(`Redis getManifest failed for key '${key}'.`, {
+				backend: "redis",
+				operation: "getManifest",
+				cause: err instanceof Error ? err : undefined,
+			});
+		}
+	}
+
+	async setManifest(key: string, value: string): Promise<void> {
+		const client = this.getClient();
+		try {
+			await client.hSet("__holodeck_meta__", key, value);
+		} catch (err) {
+			throw new ToolError(`Redis setManifest failed for key '${key}'.`, {
+				backend: "redis",
+				operation: "setManifest",
+				cause: err instanceof Error ? err : undefined,
+			});
+		}
 	}
 
 	async delete(ids: string[]): Promise<void> {
@@ -319,24 +378,24 @@ export class RedisSearchBackend implements KeywordSearchBackend {
 		await this.ensureIndex();
 	}
 
-	async index(chunks: IndexableTextChunk[]): Promise<void> {
-		if (chunks.length === 0) return;
+	async index(docs: IndexableDocument[]): Promise<void> {
+		if (docs.length === 0) return;
 
 		try {
 			const pipeline = this.client.multi();
-			for (const chunk of chunks) {
-				const key = `${this.prefix}${chunk.id}`;
-				const metaJson = JSON.stringify(chunk.metadata);
+			for (const doc of docs) {
+				const key = `${this.prefix}${doc.id}`;
+				const metaJson = JSON.stringify(doc.metadata);
 				pipeline.hSet(key, {
-					id: chunk.id,
-					content: chunk.content,
+					id: doc.id,
+					content: doc.content,
 					metadata: metaJson,
 				});
 			}
 			await pipeline.exec();
 		} catch (err) {
 			throw new ToolError(
-				`Redis keyword index failed for ${chunks.length} chunk(s). ` +
+				`Redis keyword index failed for ${docs.length} chunk(s). ` +
 					"Check your Redis connection and available memory.",
 				{
 					backend: "redis-search",
@@ -346,7 +405,7 @@ export class RedisSearchBackend implements KeywordSearchBackend {
 			);
 		}
 
-		logger.debug`Indexed ${chunks.length} chunks in RediSearch index '${this.config.indexName}'`;
+		logger.debug`Indexed ${docs.length} chunks in RediSearch index '${this.config.indexName}'`;
 	}
 
 	async search(query: string, topK: number): Promise<KeywordSearchHit[]> {
@@ -380,6 +439,31 @@ export class RedisSearchBackend implements KeywordSearchBackend {
 		return raw.documents.map((doc, i) => ({
 			id: doc.id.slice(this.prefix.length),
 			score: (rawScores[i] ?? 0) / maxScore,
+		}));
+	}
+
+	async exactMatch(query: string, topK: number): Promise<ExactMatchHit[]> {
+		// Escape RediSearch special characters for literal matching
+		const escaped = query.replace(/[,.<>{}[\]"':;!@#$%^&*()\-+=~|\\/]/g, "\\$&");
+		const ftQuery = `"${escaped}"`;
+
+		let raw: SearchReply;
+		try {
+			raw = (await this.client.ft.search(this.config.indexName, ftQuery, {
+				LIMIT: { from: 0, size: topK },
+				RETURN: ["content"],
+			})) as SearchReply;
+		} catch (err) {
+			throw new ToolError(`Redis exact match search failed on index '${this.config.indexName}'.`, {
+				backend: "redis-search",
+				operation: "exactMatch",
+				cause: err instanceof Error ? err : undefined,
+			});
+		}
+
+		return raw.documents.map((doc) => ({
+			id: doc.id.slice(this.prefix.length),
+			content: String(doc.value.content ?? ""),
 		}));
 	}
 

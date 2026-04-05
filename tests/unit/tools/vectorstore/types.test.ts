@@ -20,7 +20,7 @@ describe("DocumentChunkSchema", () => {
 		source_path: "docs/guide.md",
 		token_count: 15,
 		embedding: [0.1, 0.2, 0.3],
-		file_modified_at: 1712000000000,
+		sha256: "abc123def456",
 	};
 
 	it("parses a valid content chunk", () => {

@@ -1,7 +1,12 @@
 import { Client } from "@opensearch-project/opensearch";
 import { ToolError } from "../../../lib/errors.js";
 import { getModuleLogger } from "../../../lib/logger.js";
-import type { IndexableTextChunk, KeywordSearchBackend, KeywordSearchHit } from "./types.js";
+import type {
+	ExactMatchHit,
+	IndexableDocument,
+	KeywordSearchBackend,
+	KeywordSearchHit,
+} from "./types.js";
 
 const logger = getModuleLogger("vectorstore.backends.opensearch");
 
@@ -146,17 +151,17 @@ export class OpenSearchBackend implements KeywordSearchBackend {
 		}
 	}
 
-	async index(chunks: IndexableTextChunk[]): Promise<void> {
+	async index(docs: IndexableDocument[]): Promise<void> {
 		this.assertInitialized("index");
 
-		if (chunks.length === 0) return;
+		if (docs.length === 0) return;
 
 		const { indexName } = this.config;
 
 		// Build bulk body: alternating action + document lines.
 		// Collected as object[] then cast to the SDK's body type at the call site.
 		const bulkOps: object[] = [];
-		for (const chunk of chunks) {
+		for (const chunk of docs) {
 			bulkOps.push({ index: { _index: indexName, _id: chunk.id } });
 			const doc: IndexedDocument = {
 				content: chunk.content,
@@ -180,10 +185,10 @@ export class OpenSearchBackend implements KeywordSearchBackend {
 				logger.warn`OpenSearch bulk index had errors: ${failedItems.join("; ")}`;
 			}
 
-			logger.debug`OpenSearch bulk indexed ${chunks.length} chunks into "${indexName}"`;
+			logger.debug`OpenSearch bulk indexed ${docs.length} chunks into "${indexName}"`;
 		} catch (err) {
 			throw new ToolError(
-				`Failed to bulk index ${chunks.length} chunks into OpenSearch "${indexName}"`,
+				`Failed to bulk index ${docs.length} chunks into OpenSearch "${indexName}"`,
 				{
 					backend: "opensearch",
 					operation: "index",
@@ -235,6 +240,40 @@ export class OpenSearchBackend implements KeywordSearchBackend {
 			throw new ToolError(`Failed to search OpenSearch index "${indexName}"`, {
 				backend: "opensearch",
 				operation: "search",
+				cause: err instanceof Error ? err : new Error(String(err)),
+			});
+		}
+	}
+
+	async exactMatch(query: string, topK: number): Promise<ExactMatchHit[]> {
+		this.assertInitialized("exactMatch");
+
+		const { indexName } = this.config;
+
+		try {
+			const response = await this.client.search({
+				index: indexName,
+				body: {
+					size: topK,
+					query: {
+						match_phrase: {
+							content: query,
+						},
+					},
+				},
+			});
+
+			const responseBody = response.body as SearchResponseBody;
+			const hits = responseBody.hits.hits;
+
+			return hits.map((hit) => ({
+				id: hit._id,
+				content: hit._source?.content ?? "",
+			}));
+		} catch (err) {
+			throw new ToolError(`Failed to exact match search OpenSearch index "${indexName}"`, {
+				backend: "opensearch",
+				operation: "exactMatch",
 				cause: err instanceof Error ? err : new Error(String(err)),
 			});
 		}

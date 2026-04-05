@@ -6,7 +6,8 @@ import { OpenSearchBackend } from "./opensearch.js";
 import { PostgresFTSBackend, PostgresVectorBackend } from "./postgres.js";
 import { RedisSearchBackend, RedisVectorBackend } from "./redis.js";
 import type {
-	IndexableTextChunk,
+	ExactMatchHit,
+	IndexableDocument,
 	KeywordSearchBackend,
 	KeywordSearchHit,
 	VectorStoreBackend,
@@ -61,12 +62,16 @@ class DeferredRedisSearchBackend implements KeywordSearchBackend {
 		return this.inner;
 	}
 
-	async index(chunks: IndexableTextChunk[]): Promise<void> {
-		return this.assertReady().index(chunks);
+	async index(docs: IndexableDocument[]): Promise<void> {
+		return this.assertReady().index(docs);
 	}
 
 	async search(query: string, topK: number): Promise<KeywordSearchHit[]> {
 		return this.assertReady().search(query, topK);
+	}
+
+	async exactMatch(query: string, topK: number): Promise<ExactMatchHit[]> {
+		return this.assertReady().exactMatch(query, topK);
 	}
 
 	async delete(ids: string[]): Promise<void> {

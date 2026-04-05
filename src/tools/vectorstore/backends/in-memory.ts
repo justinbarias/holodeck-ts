@@ -1,9 +1,10 @@
 import type {
-	IndexableChunk,
-	IndexableTextChunk,
+	ExactMatchHit,
+	IndexableDocument,
 	KeywordSearchBackend,
 	KeywordSearchConfig,
 	KeywordSearchHit,
+	StoredDocument,
 	VectorSearchHit,
 	VectorStoreBackend,
 	VectorStoreConfig,
@@ -48,11 +49,13 @@ interface StoredChunk {
 export class InMemoryVectorBackend implements VectorStoreBackend {
 	private readonly config: VectorStoreConfig;
 	private store: Map<string, StoredChunk>;
+	private manifestStore: Map<string, string>;
 	private initialized: boolean;
 
 	constructor(config: VectorStoreConfig) {
 		this.config = config;
 		this.store = new Map();
+		this.manifestStore = new Map();
 		this.initialized = false;
 	}
 
@@ -60,20 +63,20 @@ export class InMemoryVectorBackend implements VectorStoreBackend {
 		this.initialized = true;
 	}
 
-	async upsert(chunks: IndexableChunk[]): Promise<void> {
+	async upsert(docs: IndexableDocument[]): Promise<void> {
 		if (!this.initialized) {
 			throw new Error("InMemoryVectorBackend: call initialize() before upsert()");
 		}
-		for (const chunk of chunks) {
-			if (chunk.embedding.length !== this.config.dimensions) {
+		for (const doc of docs) {
+			if (doc.embedding.length !== this.config.dimensions) {
 				throw new Error(
-					`InMemoryVectorBackend: expected embedding dimension ${this.config.dimensions}, got ${chunk.embedding.length} for id "${chunk.id}"`,
+					`InMemoryVectorBackend: expected embedding dimension ${this.config.dimensions}, got ${doc.embedding.length} for id "${doc.id}"`,
 				);
 			}
-			this.store.set(chunk.id, {
-				embedding: chunk.embedding,
-				content: chunk.content,
-				metadata: chunk.metadata,
+			this.store.set(doc.id, {
+				embedding: doc.embedding,
+				content: doc.content,
+				metadata: doc.metadata,
 			});
 		}
 	}
@@ -94,6 +97,28 @@ export class InMemoryVectorBackend implements VectorStoreBackend {
 		return results.slice(0, topK);
 	}
 
+	async retrieve(ids: string[]): Promise<Map<string, StoredDocument>> {
+		if (!this.initialized) {
+			throw new Error("InMemoryVectorBackend: call initialize() before retrieve()");
+		}
+		const result = new Map<string, StoredDocument>();
+		for (const id of ids) {
+			const entry = this.store.get(id);
+			if (entry) {
+				result.set(id, { id, content: entry.content, metadata: entry.metadata });
+			}
+		}
+		return result;
+	}
+
+	async getManifest(key: string): Promise<string | null> {
+		return this.manifestStore.get(key) ?? null;
+	}
+
+	async setManifest(key: string, value: string): Promise<void> {
+		this.manifestStore.set(key, value);
+	}
+
 	async delete(ids: string[]): Promise<void> {
 		if (!this.initialized) {
 			throw new Error("InMemoryVectorBackend: call initialize() before delete()");
@@ -105,6 +130,7 @@ export class InMemoryVectorBackend implements VectorStoreBackend {
 
 	async close(): Promise<void> {
 		this.store = new Map();
+		this.manifestStore = new Map();
 		this.initialized = false;
 	}
 }
@@ -128,6 +154,7 @@ export class InMemoryBM25Backend implements KeywordSearchBackend {
 	private invertedIndex: Map<string, InvertedEntry>;
 	/** per-document token count */
 	private docLengths: Map<string, number>;
+	private contentStore: Map<string, string>;
 	/** total number of indexed documents */
 	private docCount: number;
 	/** cumulative sum of all document lengths (for avgdl) */
@@ -137,6 +164,7 @@ export class InMemoryBM25Backend implements KeywordSearchBackend {
 	constructor(_config: KeywordSearchConfig) {
 		this.invertedIndex = new Map();
 		this.docLengths = new Map();
+		this.contentStore = new Map();
 		this.docCount = 0;
 		this.totalDocLength = 0;
 		this.initialized = false;
@@ -146,17 +174,19 @@ export class InMemoryBM25Backend implements KeywordSearchBackend {
 		this.initialized = true;
 	}
 
-	async index(chunks: IndexableTextChunk[]): Promise<void> {
+	async index(docs: IndexableDocument[]): Promise<void> {
 		if (!this.initialized) {
 			throw new Error("InMemoryBM25Backend: call initialize() before index()");
 		}
 
-		for (const chunk of chunks) {
+		for (const chunk of docs) {
 			// If document already exists, remove it first to handle upsert semantics
 			const existingLength = this.docLengths.get(chunk.id);
 			if (existingLength !== undefined) {
 				this._removeDoc(chunk.id);
 			}
+
+			this.contentStore.set(chunk.id, chunk.content);
 
 			const tokens = tokenize(chunk.content);
 			const dl = tokens.length;
@@ -238,9 +268,25 @@ export class InMemoryBM25Backend implements KeywordSearchBackend {
 		}
 	}
 
+	async exactMatch(query: string, topK: number): Promise<ExactMatchHit[]> {
+		if (!this.initialized) {
+			throw new Error("InMemoryBM25Backend: call initialize() before exactMatch()");
+		}
+		const lower = query.toLowerCase();
+		const results: ExactMatchHit[] = [];
+		for (const [id, content] of this.contentStore) {
+			if (content.toLowerCase().includes(lower)) {
+				results.push({ id, content });
+				if (results.length >= topK) break;
+			}
+		}
+		return results;
+	}
+
 	async close(): Promise<void> {
 		this.invertedIndex = new Map();
 		this.docLengths = new Map();
+		this.contentStore = new Map();
 		this.docCount = 0;
 		this.totalDocLength = 0;
 		this.initialized = false;
@@ -255,6 +301,7 @@ export class InMemoryBM25Backend implements KeywordSearchBackend {
 		if (dl === undefined) return; // doc not indexed
 
 		this.docLengths.delete(id);
+		this.contentStore.delete(id);
 		this.docCount = Math.max(0, this.docCount - 1);
 		this.totalDocLength = Math.max(0, this.totalDocLength - dl);
 

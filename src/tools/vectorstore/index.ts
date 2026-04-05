@@ -3,11 +3,12 @@ import type { HierarchicalDocumentTool } from "../../config/schema.js";
 import { ToolError } from "../../lib/errors.js";
 import { getModuleLogger } from "../../lib/logger.js";
 import { createBackends } from "./backends/factory.js";
+import type { StoredDocument } from "./backends/types.js";
 import { MarkdownChunker } from "./chunker.js";
 import { getConverter } from "./converters/factory.js";
 import { discoverFiles } from "./discovery.js";
 import type { EmbeddingProvider } from "./embeddings/types.js";
-import type { DocumentChunk, SearchResponse, SearchResult } from "./types.js";
+import type { SearchResponse, SearchResult } from "./types.js";
 
 const logger = getModuleLogger("vectorstore.index");
 
@@ -29,13 +30,17 @@ export interface VectorstoreServer {
 }
 
 // ---------------------------------------------------------------------------
-// Internal state per tracked file
+// Manifest types for SHA-256 change detection
 // ---------------------------------------------------------------------------
 
-interface FileIndexState {
-	modifiedAt: Date;
+interface FileManifestEntry {
+	sha256: string;
 	chunkIds: string[];
 }
+
+type FileManifest = Record<string, FileManifestEntry>;
+
+const MANIFEST_KEY = "__file_manifest__";
 
 // ---------------------------------------------------------------------------
 // RRF constants
@@ -53,12 +58,6 @@ class VectorstoreServerImpl implements VectorstoreServer {
 
 	/** Backends — created lazily so we can await initialize() */
 	private readonly backendPair: ReturnType<typeof createBackends>;
-
-	/** In-memory chunk store: chunkId → full DocumentChunk */
-	private readonly chunkStore = new Map<string, DocumentChunk>();
-
-	/** Per-file tracking: filePath → { modifiedAt, chunkIds } */
-	private readonly fileIndex = new Map<string, FileIndexState>();
 
 	/** Lazy initialization guard — null = not yet started */
 	private initPromise: Promise<void> | null = null;
@@ -126,8 +125,6 @@ class VectorstoreServerImpl implements VectorstoreServer {
 
 	async close(): Promise<void> {
 		await Promise.all([this.backendPair.vector.close(), this.backendPair.keyword.close()]);
-		this.chunkStore.clear();
-		this.fileIndex.clear();
 		this.initPromise = null;
 	}
 
@@ -147,6 +144,11 @@ class VectorstoreServerImpl implements VectorstoreServer {
 	// -------------------------------------------------------------------------
 
 	private async ingestAll(): Promise<void> {
+		// 1. Load manifest from backend
+		const raw = await this.backendPair.vector.getManifest(MANIFEST_KEY);
+		const manifest: FileManifest = raw ? JSON.parse(raw) : {};
+
+		// 2. Discover files
 		let discoveredFiles: Awaited<ReturnType<typeof discoverFiles>>;
 		try {
 			discoveredFiles = await discoverFiles(this.toolConfig.source);
@@ -159,26 +161,26 @@ class VectorstoreServerImpl implements VectorstoreServer {
 
 		const discoveredPaths = new Set(discoveredFiles.map((f) => f.path));
 
-		// --- Delete stale chunks for removed files ---
+		// 3. Delete chunks for removed files (in manifest but not discovered)
 		let deletedCount = 0;
-		for (const [filePath, state] of this.fileIndex) {
+		for (const [filePath, entry] of Object.entries(manifest)) {
 			if (!discoveredPaths.has(filePath)) {
-				await this.deleteFileChunks(filePath, state.chunkIds);
-				this.fileIndex.delete(filePath);
+				await this.deleteFileChunks(filePath, entry.chunkIds);
+				delete manifest[filePath];
 				deletedCount++;
 				logger.debug`Removed stale file from index: ${filePath}`;
 			}
 		}
 
-		// --- Process each discovered file ---
+		// 4. Process each discovered file
 		let skippedCount = 0;
 		let updatedCount = 0;
 
 		for (const file of discoveredFiles) {
-			const existing = this.fileIndex.get(file.path);
+			const existing = manifest[file.path];
 
-			// Skip unchanged files
-			if (existing && existing.modifiedAt.getTime() === file.modifiedAt.getTime()) {
+			// Skip unchanged files (SHA-256 match)
+			if (existing && existing.sha256 === file.sha256) {
 				skippedCount++;
 				continue;
 			}
@@ -189,13 +191,16 @@ class VectorstoreServerImpl implements VectorstoreServer {
 			}
 
 			try {
-				const chunkIds = await this.ingestFile(file.path, file.extension, file.modifiedAt);
-				this.fileIndex.set(file.path, { modifiedAt: file.modifiedAt, chunkIds });
+				const chunkIds = await this.ingestFile(file.path, file.extension, file.sha256);
+				manifest[file.path] = { sha256: file.sha256, chunkIds };
 				updatedCount++;
 			} catch (err) {
 				logger.warn`Failed to ingest file '${file.path}': ${err instanceof Error ? err.message : String(err)}`;
 			}
 		}
+
+		// 5. Save manifest
+		await this.backendPair.vector.setManifest(MANIFEST_KEY, JSON.stringify(manifest));
 
 		logger.info`Ingestion complete — skipped: ${skippedCount}, updated: ${updatedCount}, deleted: ${deletedCount}`;
 	}
@@ -206,17 +211,10 @@ class VectorstoreServerImpl implements VectorstoreServer {
 			this.backendPair.vector.delete(chunkIds),
 			this.backendPair.keyword.delete(chunkIds),
 		]);
-		for (const id of chunkIds) {
-			this.chunkStore.delete(id);
-		}
 		logger.debug`Deleted ${chunkIds.length} chunks for file: ${filePath}`;
 	}
 
-	private async ingestFile(
-		filePath: string,
-		extension: string,
-		modifiedAt: Date,
-	): Promise<string[]> {
+	private async ingestFile(filePath: string, extension: string, sha256: string): Promise<string[]> {
 		// 1. Read + convert
 		const buffer = Buffer.from(await Bun.file(filePath).arrayBuffer());
 		const converter = getConverter(extension);
@@ -245,16 +243,14 @@ class VectorstoreServerImpl implements VectorstoreServer {
 		// 5. Embed
 		const embeddings = await this.embeddingProvider.embed(textsToEmbed);
 
-		// 6. Assemble full DocumentChunk objects and build IndexableChunk lists
+		// 6. Build IndexableDocument array for both backends
 		const chunkIds: string[] = [];
-		const vectorChunks: Array<{
+		const docs: Array<{
 			id: string;
 			content: string;
 			embedding: number[];
 			metadata: Record<string, unknown>;
 		}> = [];
-		const keywordChunks: Array<{ id: string; content: string; metadata: Record<string, unknown> }> =
-			[];
 
 		for (let i = 0; i < rawChunks.length; i++) {
 			const raw = rawChunks[i];
@@ -263,44 +259,26 @@ class VectorstoreServerImpl implements VectorstoreServer {
 			if (!embedding) continue;
 
 			const chunkId = `${documentId}:${raw.chunk_index}`;
-
-			const fullChunk: DocumentChunk = {
-				id: chunkId,
-				document_id: documentId,
-				content: raw.content,
-				contextualized_content: raw.contextualized_content,
-				parent_chain: raw.parent_chain,
-				section_id: raw.section_id,
-				subsection_ids: raw.subsection_ids,
-				chunk_type: raw.chunk_type,
-				chunk_index: raw.chunk_index,
-				source_path: filePath,
-				heading_level: raw.heading_level,
-				token_count: raw.token_count,
-				embedding,
-				file_modified_at: modifiedAt.getTime(),
-			};
-
-			this.chunkStore.set(chunkId, fullChunk);
 			chunkIds.push(chunkId);
 
 			const metadata: Record<string, unknown> = {
 				source_path: filePath,
 				document_id: documentId,
 				section_id: raw.section_id,
+				subsection_ids: raw.subsection_ids,
+				parent_chain: raw.parent_chain,
 				chunk_index: raw.chunk_index,
 				chunk_type: raw.chunk_type,
+				heading_level: raw.heading_level,
+				contextualized_content: raw.contextualized_content,
+				sha256,
 			};
 
-			vectorChunks.push({ id: chunkId, content: raw.content, embedding, metadata });
-			keywordChunks.push({ id: chunkId, content: raw.content, metadata });
+			docs.push({ id: chunkId, content: raw.content, embedding, metadata });
 		}
 
-		// 7. Upsert into backends
-		await Promise.all([
-			this.backendPair.vector.upsert(vectorChunks),
-			this.backendPair.keyword.index(keywordChunks),
-		]);
+		// 7. Upsert into both backends
+		await Promise.all([this.backendPair.vector.upsert(docs), this.backendPair.keyword.index(docs)]);
 
 		logger.debug`Ingested ${chunkIds.length} chunks from: ${filePath}`;
 		return chunkIds;
@@ -344,13 +322,16 @@ class VectorstoreServerImpl implements VectorstoreServer {
 		if (!queryEmbedding) return [];
 
 		const hits = await this.backendPair.vector.search(queryEmbedding, topK);
+		if (hits.length === 0) return [];
+
+		const docs = await this.backendPair.vector.retrieve(hits.map((h) => h.id));
 		const results: SearchResult[] = [];
 
 		for (const hit of hits) {
 			if (minScore !== undefined && hit.score < minScore) continue;
-			const chunk = this.chunkStore.get(hit.id);
-			if (!chunk) continue;
-			results.push(this.buildSearchResult(chunk, hit.score, { semanticScore: hit.score }));
+			const doc = docs.get(hit.id);
+			if (!doc) continue;
+			results.push(this.buildSearchResult(doc, hit.score, { semanticScore: hit.score }));
 		}
 
 		return results.slice(0, topK);
@@ -362,27 +343,38 @@ class VectorstoreServerImpl implements VectorstoreServer {
 		minScore: number | undefined,
 	): Promise<SearchResult[]> {
 		const hits = await this.backendPair.keyword.search(query, topK);
+		if (hits.length === 0) return [];
+
+		const docs = await this.backendPair.vector.retrieve(hits.map((h) => h.id));
 		const results: SearchResult[] = [];
 
 		for (const hit of hits) {
 			if (minScore !== undefined && hit.score < minScore) continue;
-			const chunk = this.chunkStore.get(hit.id);
-			if (!chunk) continue;
-			results.push(this.buildSearchResult(chunk, hit.score, { keywordScore: hit.score }));
+			const doc = docs.get(hit.id);
+			if (!doc) continue;
+			results.push(this.buildSearchResult(doc, hit.score, { keywordScore: hit.score }));
 		}
 
 		return results.slice(0, topK);
 	}
 
-	private exactSearch(query: string, topK: number, minScore: number | undefined): SearchResult[] {
-		const lower = query.toLowerCase();
+	private async exactSearch(
+		query: string,
+		topK: number,
+		minScore: number | undefined,
+	): Promise<SearchResult[]> {
+		const exactHits = await this.backendPair.keyword.exactMatch(query, topK);
+		if (exactHits.length === 0) return [];
+
+		const docs = await this.backendPair.vector.retrieve(exactHits.map((h) => h.id));
 		const results: SearchResult[] = [];
 
-		for (const chunk of this.chunkStore.values()) {
-			if (!chunk.content.toLowerCase().includes(lower)) continue;
+		for (const hit of exactHits) {
 			const score = 1.0;
 			if (minScore !== undefined && score < minScore) continue;
-			results.push(this.buildSearchResult(chunk, score, { exactScore: score, isExactMatch: true }));
+			const doc = docs.get(hit.id);
+			if (!doc) continue;
+			results.push(this.buildSearchResult(doc, score, { exactScore: score, isExactMatch: true }));
 		}
 
 		return results.slice(0, topK);
@@ -396,28 +388,20 @@ class VectorstoreServerImpl implements VectorstoreServer {
 		// Retrieve top-150 candidates per modality, then RRF-fuse
 		const candidateK = Math.max(150, topK * 10);
 
-		// Run all three modalities in parallel
+		// Run all modalities in parallel
 		const [queryEmbedding] = await this.embeddingProvider.embed([query]);
 		if (!queryEmbedding) return [];
 
-		const [vectorHits, keywordHits] = await Promise.all([
+		const [vectorHits, keywordHits, exactHits] = await Promise.all([
 			this.backendPair.vector.search(queryEmbedding, candidateK),
 			this.backendPair.keyword.search(query, candidateK),
+			this.backendPair.keyword.exactMatch(query, candidateK),
 		]);
-
-		// Exact hits from chunk store
-		const lower = query.toLowerCase();
-		const exactIds: string[] = [];
-		for (const [id, chunk] of this.chunkStore) {
-			if (chunk.content.toLowerCase().includes(lower)) {
-				exactIds.push(id);
-			}
-		}
 
 		// Build ranked lists: id → rank (1-based)
 		const semanticRanks = new Map<string, number>(vectorHits.map((h, i) => [h.id, i + 1]));
 		const keywordRanks = new Map<string, number>(keywordHits.map((h, i) => [h.id, i + 1]));
-		const exactRanks = new Map<string, number>(exactIds.map((id, i) => [id, i + 1]));
+		const exactRanks = new Map<string, number>(exactHits.map((h, i) => [h.id, i + 1]));
 
 		const sw = this.toolConfig.semantic_weight;
 		const kw = this.toolConfig.keyword_weight;
@@ -452,22 +436,26 @@ class VectorstoreServerImpl implements VectorstoreServer {
 		const maxScore = Math.max(...rrfScores.values(), 0);
 		const normalizer = maxScore > 0 ? maxScore : 1;
 
-		// Sort and filter
+		// Sort and take top-K winners
 		const sorted = [...rrfScores.entries()].sort((a, b) => b[1] - a[1]);
+		const topIds = sorted.slice(0, topK).map(([id]) => id);
+
+		// Retrieve only the final top-K documents
+		const docs = await this.backendPair.vector.retrieve(topIds);
 
 		const results: SearchResult[] = [];
 		for (const [id, rawScore] of sorted) {
 			const normalizedScore = rawScore / normalizer;
 			if (minScore !== undefined && normalizedScore < minScore) continue;
-			const chunk = this.chunkStore.get(id);
-			if (!chunk) continue;
+			const doc = docs.get(id);
+			if (!doc) continue;
 
 			const semScore = vectorScoreMap.get(id);
 			const kwScore = keywordScoreMap.get(id);
 			const isExact = exactRanks.has(id);
 
 			results.push(
-				this.buildSearchResult(chunk, normalizedScore, {
+				this.buildSearchResult(doc, normalizedScore, {
 					semanticScore: semScore,
 					keywordScore: kwScore,
 					exactScore: isExact ? 1.0 : undefined,
@@ -482,7 +470,7 @@ class VectorstoreServerImpl implements VectorstoreServer {
 	}
 
 	private buildSearchResult(
-		chunk: DocumentChunk,
+		doc: StoredDocument,
 		score: number,
 		opts: {
 			semanticScore?: number;
@@ -491,17 +479,19 @@ class VectorstoreServerImpl implements VectorstoreServer {
 			isExactMatch?: boolean;
 		} = {},
 	): SearchResult {
+		const meta = doc.metadata;
+		const contextualizedContent = meta.contextualized_content as string | undefined;
 		return {
-			content: chunk.contextualized_content ?? chunk.content,
+			content: contextualizedContent ?? doc.content,
 			score,
 			semantic_score: opts.semanticScore,
 			keyword_score: opts.keywordScore,
 			exact_score: opts.exactScore,
-			source_path: chunk.source_path,
-			parent_chain: chunk.parent_chain,
-			section_id: chunk.section_id,
-			subsection_ids: chunk.subsection_ids,
-			chunk_index: chunk.chunk_index,
+			source_path: (meta.source_path as string) ?? "",
+			parent_chain: (meta.parent_chain as string[]) ?? [],
+			section_id: (meta.section_id as string) ?? "",
+			subsection_ids: (meta.subsection_ids as string[]) ?? [],
+			chunk_index: (meta.chunk_index as number) ?? 0,
 			is_exact_match: opts.isExactMatch ?? false,
 		};
 	}
