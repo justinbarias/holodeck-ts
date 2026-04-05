@@ -2,7 +2,7 @@ import { z } from "zod";
 import { toErrorMessage } from "../../lib/errors.js";
 import { getModuleLogger } from "../../lib/logger.js";
 import type { SearchOptions, VectorstoreServer } from "./index.js";
-import type { SearchResponse } from "./types.js";
+import type { SearchResponse, SearchResult } from "./types.js";
 
 const logger = getModuleLogger("vectorstore.tool");
 
@@ -43,6 +43,63 @@ export interface VectorstoreTool {
 }
 
 // ---------------------------------------------------------------------------
+// Tool-output result shape (token-efficient field mapping)
+// ---------------------------------------------------------------------------
+
+interface ToolSearchResult {
+	content: string;
+	score: number;
+	semantic_score?: number;
+	keyword_score?: number;
+	exact_score?: number;
+	source: string;
+	breadcrumb: string;
+	section_id: string;
+	chunk_index: number;
+	is_exact_match: boolean;
+}
+
+interface ToolSearchResponse {
+	query: string;
+	search_mode: "semantic" | "keyword" | "exact" | "hybrid";
+	total_results: number;
+	results: ToolSearchResult[];
+	degraded?: boolean;
+	degraded_details?: string;
+}
+
+function mapResult(r: SearchResult): ToolSearchResult {
+	return {
+		content: r.content,
+		score: r.score,
+		semantic_score: r.semantic_score,
+		keyword_score: r.keyword_score,
+		exact_score: r.exact_score,
+		source: r.source_path,
+		breadcrumb: r.parent_chain.join(" > "),
+		section_id: r.section_id,
+		chunk_index: r.chunk_index,
+		is_exact_match: r.is_exact_match,
+	};
+}
+
+export function toToolResult(response: SearchResponse): CallToolResult {
+	const mapped: ToolSearchResponse = {
+		query: response.query,
+		search_mode: response.search_mode,
+		total_results: response.total_results,
+		results: response.results.map(mapResult),
+		...(response.degraded !== undefined && { degraded: response.degraded }),
+		...(response.degraded_details !== undefined && {
+			degraded_details: response.degraded_details,
+		}),
+	};
+	return {
+		content: [{ type: "text", text: JSON.stringify(mapped) }],
+	};
+}
+
+// ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
 
@@ -75,9 +132,7 @@ export function createVectorstoreTool(
 				};
 			}
 
-			return {
-				content: [{ type: "text", text: JSON.stringify(response) }],
-			};
+			return toToolResult(response);
 		},
 	};
 }

@@ -75,9 +75,43 @@ describe("createVectorstoreTool", () => {
 		expect(result.isError).toBeUndefined();
 		expect(result.content).toHaveLength(1);
 		expect(result.content[0]?.type).toBe("text");
-		const parsed = JSON.parse(result.content[0]?.text ?? "{}") as SearchResponse;
+		const parsed = JSON.parse(result.content[0]?.text ?? "{}");
 		expect(parsed.query).toBe("hello");
 		expect(parsed.total_results).toBe(1);
+	});
+
+	it("maps parent_chain to breadcrumb and source_path to source, omits subsection_ids", async () => {
+		const response = makeSearchResponse({
+			query: "breadcrumb test",
+			results: [
+				{
+					content: "Some content",
+					score: 0.85,
+					semantic_score: 0.85,
+					keyword_score: undefined,
+					exact_score: undefined,
+					source_path: "/docs/guide.md",
+					parent_chain: ["# Guide", "## Setup", "### Install"],
+					section_id: "install-1",
+					subsection_ids: ["install-1-a", "install-1-b"],
+					chunk_index: 2,
+					is_exact_match: false,
+				},
+			],
+			total_results: 1,
+		});
+		const server = makeMockServer(() => Promise.resolve(response));
+		const tool = createVectorstoreTool("my_docs", "Search my docs", server);
+
+		const result = await tool.handler({ query: "breadcrumb test" });
+		const parsed = JSON.parse(result.content[0]?.text ?? "{}");
+		const r = parsed.results[0];
+
+		expect(r.breadcrumb).toBe("# Guide > ## Setup > ### Install");
+		expect(r.source).toBe("/docs/guide.md");
+		expect(r.parent_chain).toBeUndefined();
+		expect(r.source_path).toBeUndefined();
+		expect(r.subsection_ids).toBeUndefined();
 	});
 
 	it("returns total_results: 0 as a non-error when there are no results", async () => {
