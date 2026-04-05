@@ -1,0 +1,23 @@
+name: e2e-vectorstore-test
+model:
+  provider: anthropic
+  name: ${MODEL_NAME}
+  max_tokens: 500
+  temperature: 0
+embedding_provider:
+  provider: ollama
+  name: ${OLLAMA_EMBEDDING_MODEL}
+  endpoint: ${OLLAMA_EMBEDDING_ENDPOINT}
+tools:
+  - type: hierarchical_document
+    name: docs_search
+    description: Search test documentation about TypeScript and databases
+    source: tests/fixtures/docs
+    search_mode: hybrid
+    top_k: 5
+    contextual_embeddings: false
+    database:
+      provider: in-memory
+instructions:
+  inline: |
+    You are a documentation search assistant. When asked a question, use the mcp__holodeck_vectorstore__docs_search tool to find relevant information, then answer based on the results. Always include VECTORSTORE_E2E_OK at the end of your response.
