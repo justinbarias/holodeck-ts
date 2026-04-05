@@ -24,7 +24,8 @@ tools:
     top_k: 10
     contextual_embeddings: false
     database:
-      provider: in-memory
+      provider: redis
+      connection_string: redis://localhost:6379
 
 claude:
   working_directory: sample/research-agent
