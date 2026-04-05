@@ -12,6 +12,7 @@ export interface DiscoveredFile {
 	path: string;
 	extension: string;
 	modifiedAt: Date;
+	sha256: string;
 }
 
 /**
@@ -51,10 +52,15 @@ export async function discoverFiles(source: string): Promise<DiscoveredFile[]> {
 		}
 
 		const fileStat = await stat(filePath);
+		const content = await Bun.file(filePath).arrayBuffer();
+		const hasher = new Bun.CryptoHasher("sha256");
+		hasher.update(content);
+		const sha256 = hasher.digest("hex");
 		discovered.push({
 			path: filePath,
 			extension: ext,
 			modifiedAt: fileStat.mtime,
+			sha256,
 		});
 	}
 

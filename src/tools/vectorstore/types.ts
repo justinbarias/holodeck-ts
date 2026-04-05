@@ -14,7 +14,7 @@ export const DocumentChunkSchema = z.strictObject({
 	heading_level: z.number().int().min(1).max(6).optional(),
 	token_count: z.number().int().positive(),
 	embedding: z.array(z.number()),
-	file_modified_at: z.number().int().positive(),
+	sha256: z.string().min(1),
 });
 
 export type DocumentChunk = z.infer<typeof DocumentChunkSchema>;
