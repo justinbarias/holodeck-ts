@@ -157,7 +157,7 @@ In-process MCP via `tool()` is recommended because the vectorstore is tightly co
 
 ## 6. Contextual Retrieval (Context Prefix Generation)
 
-### Decision: Claude Agent SDK `query()` with named agent definitions
+### Decision: Claude Agent SDK `query()` with structured outputs
 
 ### Technique Overview
 Contextual Retrieval prepends a short AI-generated context (50-100 tokens) to each chunk **before** embedding and indexing. Traditional RAG chunks lose surrounding context — e.g., "Revenue grew 3% over the previous quarter" is ambiguous without its parent document. Contextual Retrieval fixes this by prefixing each chunk with situational context.
@@ -183,31 +183,33 @@ Retrieval strategy: retrieve top-150 candidates, rerank to top-20.
 
 ### Architecture: Agent SDK as Context Generator
 
-Instead of using the raw Anthropic Messages API (`@anthropic-ai/sdk`) directly, context generation is modeled as an Agent SDK task using named agent definitions via `agents: Record<string, AgentDefinition>`. This solves auth unification -- works with `CLAUDE_CODE_OAUTH_TOKEN`, API keys, Bedrock, Vertex, whatever the Agent SDK is configured with.
+Instead of using the raw Anthropic Messages API (`@anthropic-ai/sdk`) directly, context generation is modeled as an Agent SDK task using `query()` with native structured outputs (`outputFormat`). This solves auth unification — works with `CLAUDE_CODE_OAUTH_TOKEN`, API keys, Bedrock, Vertex, whatever the Agent SDK is configured with. Structured outputs guarantee valid JSON matching the Zod schema, eliminating manual JSON extraction and parsing from text responses.
 
 **Architecture:**
 ```
-query() with agents: { "context-generator": { description, prompt, model } }
-  -> Main agent receives full document + all chunks
+query() with outputFormat: { type: "json_schema", schema: z.toJSONSchema(ContextResultSchema) }
+  -> Each batch gets a direct query() call with structured output
+  -> SDK guarantees JSON output matches schema (retries internally on malformed output)
+  -> Result available via message.structured_output on success
   -> For large documents, chunks are batched manually
-  -> Each batch is processed via a separate query() call with the context-generator agent
-  -> Results are collected and merged
+  -> Batches processed with sliding-window concurrency limiter
 ```
 
-For large documents with many chunks, batching is handled manually with a concurrency limiter (e.g., `Promise.all` with concurrency limit from `context_concurrency`). Each batch query uses the `context-generator` agent definition.
+For large documents with many chunks, batching is handled manually with a concurrency limiter (e.g., `Promise.all` with concurrency limit from `context_concurrency`). Each batch is a separate `query()` call.
 
 **YAML config mapping:**
 | YAML field | Agent SDK mapping |
 |---|---|
 | `context_concurrency` | Manual concurrency limiter for parallel `query()` calls |
 | `context_max_tokens` | Instruction in prompt: "max N tokens per context" |
+| `context_model` | `options.model` on `query()` call |
 | `contextual_embeddings: true/false` | Whether to invoke the pipeline at all |
 
-**Note:** The SDK's `agents` API uses `agents: Record<string, AgentDefinition>` where `AgentDefinition` includes `description`, `prompt`, `tools`, and `model` fields. There is no `subagents: { enabled, max_parallel }` option — parallelism must be managed at the application level.
+**Note:** No named agents needed — each `query()` call is a direct single-turn invocation with `maxTurns: 1`, `permissionMode: "bypassPermissions"`, and `outputFormat` for structured JSON output. Parallelism is managed at the application level via sliding-window concurrency.
 
 ### Prompt Template
 
-**Main agent prompt (per document):**
+**Prompt per batch:**
 ```
 You are a context generation assistant. Your task is to generate short context prefixes
 for document chunks to improve search retrieval.
@@ -220,17 +222,12 @@ Below are {{N}} chunks from this document. For each chunk, generate a succinct c
 (max {{context_max_tokens}} tokens) that situates it within the overall document for
 the purposes of improving search retrieval of the chunk.
 
-If there are more than {{batch_size}} chunks, use subagents to process batches of
-{{batch_size}} chunks in parallel. Each subagent receives the full document and its
-batch of chunks.
-
-Return a JSON array:
-[{ "chunk_id": "...", "context": "..." }, ...]
-
 <chunks>
 {{CHUNKS_JSON}}
 </chunks>
 ```
+
+The JSON output structure is enforced by the SDK's `outputFormat` — no "Return a JSON array" instruction needed in the prompt. The Zod schema `z.array(z.object({ chunk_id: z.string(), context: z.string() }))` is converted via `z.toJSONSchema()` and passed as `outputFormat: { type: "json_schema", schema }`.
 
 Recommended model: `claude-haiku-4-5` (fast, cheap).
 
@@ -238,78 +235,70 @@ Recommended model: `claude-haiku-4-5` (fast, cheap).
 
 ```typescript
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { z } from "zod";
 
-async function generateContexts(
+const ContextResultSchema = z.array(z.object({
+  chunk_id: z.string(),
+  context: z.string(),
+}));
+
+async function contextualizeChunkBatch(
   document: string,
-  chunks: { id: string; content: string }[],
-  config: { context_max_tokens: number; context_concurrency: number; batch_size: number },
+  batch: { id: string; content: string }[],
+  config: { context_max_tokens: number; context_model: string },
 ): Promise<Map<string, string>> {
-  // Batch chunks for parallel processing
-  const batches: typeof chunks[] = [];
-  for (let i = 0; i < chunks.length; i += config.batch_size) {
-    batches.push(chunks.slice(i, i + config.batch_size));
-  }
-
-  // Process batches with manual concurrency control
-  const results = new Map<string, string>();
-  const concurrencyLimit = config.context_concurrency;
-
-  for (let i = 0; i < batches.length; i += concurrencyLimit) {
-    const batchGroup = batches.slice(i, i + concurrencyLimit);
-    const batchResults = await Promise.all(
-      batchGroup.map(async (batch) => {
-        const prompt = buildContextPrompt(document, batch, config);
-        let result = "";
-        for await (const message of query({
-          prompt,
-          options: {
-            model: "claude-haiku-4-5",
-            permissionMode: "acceptAll",
-            maxTurns: 1,
-            allowedTools: [],
-          },
-        })) {
-          if (message.type === "result" && message.subtype === "success") {
-            result = message.result;
-          }
-        }
-        return parseContextResult(result); // Zod-validated JSON parse
-      }),
-    );
-    for (const batchResult of batchResults) {
-      for (const [id, context] of batchResult) {
-        results.set(id, context);
-      }
+  const prompt = buildContextPrompt(document, batch, config);
+  for await (const message of query({
+    prompt,
+    options: {
+      model: config.context_model,
+      maxTurns: 1,
+      permissionMode: "bypassPermissions",
+      allowDangerouslySkipPermissions: true,
+      outputFormat: {
+        type: "json_schema",
+        schema: z.toJSONSchema(ContextResultSchema),
+      },
+    },
+  })) {
+    if (message.type === "result" && message.subtype === "success" && message.structured_output) {
+      const parsed = ContextResultSchema.parse(message.structured_output);
+      return new Map(parsed.map((r) => [r.chunk_id, r.context]));
+    }
+    if (message.type === "result" && message.subtype === "error_max_structured_output_retries") {
+      throw new Error("Context generation failed: SDK exhausted structured output retries");
     }
   }
-
-  return results;
+  return new Map();
 }
 ```
 
 ### What This Eliminates
-- **No `@anthropic-ai/sdk` direct dependency** -- auth handled by Agent SDK
-- **No exponential backoff / rate limit logic** -- SDK handles retries
-- **No prompt cache management** -- batched calls per document
+- **No `@anthropic-ai/sdk` direct dependency** — auth handled by Agent SDK
+- **No exponential backoff / rate limit logic** — SDK handles retries
+- **No prompt cache management** — batched calls per document
+- **No manual JSON extraction from text** — `outputFormat` guarantees valid JSON
+- **No named agent definitions needed** — direct `query()` with `outputFormat`
 
 ### What Remains
-- A function to format the prompt (document + chunks -> structured prompt string)
+- A function to format the prompt (document + chunks → structured prompt string)
 - Manual batching and concurrency control (`Promise.all` with concurrency limit)
-- A `query()` call with constrained options per batch
-- A Zod schema to parse/validate the JSON result
-- Error handling: if `message.subtype` indicates error, retry the batch
+- A `query()` call with `outputFormat` per batch
+- A Zod schema for type-safe validation of `structured_output`
+- Error handling: check `message.subtype === "error_max_structured_output_retries"` for failures
 
 ### Trade-offs vs Direct API
 
-| Factor | Agent SDK approach | Direct `@anthropic-ai/sdk` |
+| Factor | Agent SDK + structured outputs | Direct `@anthropic-ai/sdk` |
 |---|---|---|
 | Auth | Unified (OAuth, API key, Bedrock, Vertex) | Needs separate `ANTHROPIC_API_KEY` |
+| Output validation | SDK guarantees valid JSON via `outputFormat` | Manual JSON extraction + parsing |
 | Subprocess overhead | 1 per batch | 0 (direct HTTP) |
 | Prompt caching | Not needed (batched calls) | Critical for cost efficiency |
 | Parallelism | Manual (`Promise.all` + concurrency limit) | Manual `mapWithConcurrency()` |
 | Rate limits | SDK handles internally | Manual backoff logic |
-| Complexity | Prompt template + batch mgmt + parse result | Cache mgmt + concurrency + backoff |
-| Failure granularity | Per-batch retry | Per-chunk retry |
+| Complexity | Prompt template + batch mgmt + Zod schema | Cache mgmt + concurrency + backoff + JSON parsing |
+| Failure granularity | Per-batch retry + structured output retries | Per-chunk retry |
 
 ---
 

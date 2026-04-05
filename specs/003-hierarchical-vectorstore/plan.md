@@ -171,11 +171,11 @@ All backend scores are normalized to 0.0-1.0 (higher = better) before RRF fusion
 
 ### 5. Contextual Retrieval via Agent SDK
 
-Context generation uses the Claude Agent SDK `query()` function with named agent definitions via `agents: Record<string, AgentDefinition>`. A `context-generator` agent is defined with its own prompt, model (`claude-haiku-4-5`), and constrained tools. For large documents with many chunks, the main agent dispatches work to the `context-generator` agent. This approach:
-- **Unifies auth** -- works with OAuth tokens, API keys, Bedrock, Vertex
-- **Eliminates complexity** -- no prompt caching, no concurrency control, no rate limit handling
-- **Uses the actual SDK API** -- `agents` (named agent definitions), not `subagents: { enabled, max_parallel }`
-- **Note**: Manual batching of chunks is needed since the SDK doesn't have a built-in `max_parallel` toggle; use `Promise.all` with a concurrency limiter mapped from `context_concurrency` YAML config
+Context generation uses the Claude Agent SDK `query()` function with native structured outputs (`outputFormat`). Each batch of chunks gets a direct `query()` call with `outputFormat: { type: "json_schema", schema }` derived from a Zod schema via `z.toJSONSchema()`, model set to `claude-haiku-4-5`, and `maxTurns: 1`. This approach:
+- **Unifies auth** — works with OAuth tokens, API keys, Bedrock, Vertex
+- **Eliminates complexity** — no prompt caching, no concurrency control, no rate limit handling, no manual JSON parsing
+- **Guarantees valid output** — SDK's `outputFormat` enforces JSON schema compliance, retries internally on malformed output
+- **Note**: Manual batching of chunks is needed; use `Promise.all` with a sliding-window concurrency limiter mapped from `context_concurrency` YAML config
 
 ### 6. Document Ingestion Pipeline
 
