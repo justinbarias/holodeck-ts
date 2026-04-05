@@ -35,6 +35,58 @@ export interface KeywordSearchConfig {
 	readonly indexName: string;
 }
 
+// ---------------------------------------------------------------------------
+// Native hybrid search capability (Redis >= 8.4)
+// ---------------------------------------------------------------------------
+
+/** Result from a native server-side hybrid (text + vector) search. */
+export interface HybridSearchHit {
+	readonly id: string;
+	/** Combined/fused score from server-side fusion. */
+	readonly score: number;
+	/** Individual semantic (vector) similarity score, if available. */
+	readonly semanticScore?: number;
+	/** Individual keyword (BM25) score, if available. */
+	readonly keywordScore?: number;
+}
+
+/** Options for native hybrid search. */
+export interface HybridSearchOptions {
+	readonly semanticWeight?: number;
+	readonly keywordWeight?: number;
+	readonly rrfK?: number;
+}
+
+/**
+ * Optional capability for backends that support native hybrid (text + vector)
+ * search in a single server-side operation (e.g. Redis 8.4+ FT.HYBRID).
+ */
+export interface HybridSearchCapable {
+	supportsNativeHybrid(): boolean;
+	hybridSearch(
+		query: string,
+		embedding: number[],
+		topK: number,
+		options?: HybridSearchOptions,
+	): Promise<HybridSearchHit[]>;
+}
+
+/** Type guard: returns true when the backend supports native hybrid search. */
+export function isHybridSearchCapable(
+	backend: VectorStoreBackend,
+): backend is VectorStoreBackend & HybridSearchCapable {
+	return (
+		"supportsNativeHybrid" in backend &&
+		typeof (backend as VectorStoreBackend & HybridSearchCapable).supportsNativeHybrid ===
+			"function" &&
+		(backend as VectorStoreBackend & HybridSearchCapable).supportsNativeHybrid()
+	);
+}
+
+// ---------------------------------------------------------------------------
+// Core backend interfaces
+// ---------------------------------------------------------------------------
+
 export interface VectorStoreBackend {
 	initialize(): Promise<void>;
 	upsert(docs: IndexableDocument[]): Promise<void>;

@@ -3,7 +3,8 @@ import type { HierarchicalDocumentTool } from "../../config/schema.js";
 import { ToolError } from "../../lib/errors.js";
 import { getModuleLogger } from "../../lib/logger.js";
 import { createBackends } from "./backends/factory.js";
-import type { StoredDocument } from "./backends/types.js";
+import type { HybridSearchCapable, StoredDocument, VectorStoreBackend } from "./backends/types.js";
+import { isHybridSearchCapable } from "./backends/types.js";
 import { MarkdownChunker } from "./chunker.js";
 import { getConverter } from "./converters/factory.js";
 import { discoverFiles } from "./discovery.js";
@@ -58,6 +59,9 @@ class VectorstoreServerImpl implements VectorstoreServer {
 
 	/** Backends — created lazily so we can await initialize() */
 	private readonly backendPair: ReturnType<typeof createBackends>;
+
+	/** Set during init when the vector backend supports native hybrid search. */
+	private nativeHybridBackend: (VectorStoreBackend & HybridSearchCapable) | null = null;
 
 	/** Lazy initialization guard — null = not yet started */
 	private initPromise: Promise<void> | null = null;
@@ -136,6 +140,13 @@ class VectorstoreServerImpl implements VectorstoreServer {
 		logger.debug`Initializing vectorstore backends for tool '${this.toolConfig.name}'`;
 		await this.backendPair.vector.initialize();
 		await this.backendPair.keyword.initialize();
+
+		// Detect native hybrid capability (e.g. Redis >= 8.4 with FT.HYBRID)
+		if (isHybridSearchCapable(this.backendPair.vector)) {
+			this.nativeHybridBackend = this.backendPair.vector;
+			logger.info`Native hybrid search enabled (server-side RRF) for tool '${this.toolConfig.name}'`;
+		}
+
 		await this.ingestAll();
 	}
 
@@ -381,6 +392,122 @@ class VectorstoreServerImpl implements VectorstoreServer {
 	}
 
 	private async hybridSearch(
+		query: string,
+		topK: number,
+		minScore: number | undefined,
+	): Promise<SearchResult[]> {
+		if (this.nativeHybridBackend) {
+			try {
+				return await this.nativeHybridSearch(query, topK, minScore);
+			} catch (err) {
+				logger.warn`Native hybrid search failed, falling back to client-side RRF: ${
+					err instanceof Error ? err.message : String(err)
+				}`;
+			}
+		}
+		return this.clientSideHybridSearch(query, topK, minScore);
+	}
+
+	/**
+	 * Native hybrid search path: uses FT.HYBRID for server-side text+vector
+	 * fusion, plus a lightweight client-side exact-match boost.
+	 */
+	private async nativeHybridSearch(
+		query: string,
+		topK: number,
+		minScore: number | undefined,
+	): Promise<SearchResult[]> {
+		const backend = this.nativeHybridBackend;
+		if (!backend) return this.clientSideHybridSearch(query, topK, minScore);
+		const candidateK = Math.max(150, topK * 10);
+
+		const [queryEmbedding] = await this.embeddingProvider.embed([query]);
+		if (!queryEmbedding) return [];
+
+		const sw = this.toolConfig.semantic_weight;
+		const kw = this.toolConfig.keyword_weight;
+		const ew = this.toolConfig.exact_weight;
+
+		// Run native hybrid (text+vector) and exact match in parallel.
+		// This reduces 3 round-trips to 2 — FT.HYBRID handles semantic + keyword
+		// server-side, and exactMatch is a cheap phrase query.
+		const [hybridHits, exactHits] = await Promise.all([
+			backend.hybridSearch(query, queryEmbedding, candidateK, {
+				semanticWeight: sw,
+				keywordWeight: kw,
+				rrfK: RRF_K,
+			}),
+			this.backendPair.keyword.exactMatch(query, candidateK),
+		]);
+
+		const exactIds = new Set(exactHits.map((h) => h.id));
+
+		// Merge: scale hybrid score by text+vector weight portion, add exact boost
+		const textVectorWeight = sw + kw;
+
+		type ScoredHit = {
+			id: string;
+			finalScore: number;
+			semanticScore?: number;
+			keywordScore?: number;
+			isExact: boolean;
+		};
+
+		const scored: ScoredHit[] = hybridHits.map((hit) => {
+			const isExact = exactIds.has(hit.id);
+			return {
+				id: hit.id,
+				finalScore: hit.score * textVectorWeight + (isExact ? ew : 0),
+				semanticScore: hit.semanticScore,
+				keywordScore: hit.keywordScore,
+				isExact,
+			};
+		});
+
+		// Add exact-only hits not present in hybrid results
+		const hybridIds = new Set(hybridHits.map((h) => h.id));
+		for (const exactHit of exactHits) {
+			if (!hybridIds.has(exactHit.id)) {
+				scored.push({
+					id: exactHit.id,
+					finalScore: ew,
+					isExact: true,
+				});
+			}
+		}
+
+		// Normalize to 0-1
+		const maxFinal = Math.max(...scored.map((s) => s.finalScore), Number.EPSILON);
+		scored.sort((a, b) => b.finalScore - a.finalScore);
+
+		// Retrieve documents for top-K
+		const topIds = scored.slice(0, topK).map((s) => s.id);
+		const docs = await this.backendPair.vector.retrieve(topIds);
+
+		const results: SearchResult[] = [];
+		for (const hit of scored) {
+			const normalizedScore = hit.finalScore / maxFinal;
+			if (minScore !== undefined && normalizedScore < minScore) continue;
+			const doc = docs.get(hit.id);
+			if (!doc) continue;
+
+			results.push(
+				this.buildSearchResult(doc, normalizedScore, {
+					semanticScore: hit.semanticScore,
+					keywordScore: hit.keywordScore,
+					exactScore: hit.isExact ? 1.0 : undefined,
+					isExactMatch: hit.isExact,
+				}),
+			);
+
+			if (results.length >= topK) break;
+		}
+
+		return results;
+	}
+
+	/** Client-side RRF hybrid search: 3 parallel queries + application-level fusion. */
+	private async clientSideHybridSearch(
 		query: string,
 		topK: number,
 		minScore: number | undefined,

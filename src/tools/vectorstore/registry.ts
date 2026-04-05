@@ -13,7 +13,18 @@ export interface VectorstoreRegistryResult {
 	servers: VectorstoreServer[];
 }
 
-export function buildVectorstoreServers(config: AgentConfig): VectorstoreRegistryResult {
+/** Overridable factory functions — used for testing without mock.module. */
+export interface VectorstoreDeps {
+	createEmbeddingProvider: typeof createEmbeddingProvider;
+	createVectorstoreServer: typeof createVectorstoreServer;
+}
+
+const defaultDeps: VectorstoreDeps = { createEmbeddingProvider, createVectorstoreServer };
+
+export function buildVectorstoreServers(
+	config: AgentConfig,
+	deps: VectorstoreDeps = defaultDeps,
+): VectorstoreRegistryResult {
 	const hdTools = config.tools.filter(
 		(t): t is HierarchicalDocumentTool => t.type === "hierarchical_document",
 	);
@@ -28,14 +39,14 @@ export function buildVectorstoreServers(config: AgentConfig): VectorstoreRegistr
 		throw new Error("embedding_provider is required when using hierarchical_document tools");
 	}
 
-	const embeddingProvider = createEmbeddingProvider(embeddingConfig);
+	const embeddingProvider = deps.createEmbeddingProvider(embeddingConfig);
 	logger.info`Creating ${hdTools.length} vectorstore server(s) with embedding provider '${embeddingConfig.provider}/${embeddingConfig.name}'`;
 
 	const servers: VectorstoreServer[] = [];
 	const sdkTools = [];
 
 	for (const hdTool of hdTools) {
-		const server = createVectorstoreServer(hdTool, embeddingProvider);
+		const server = deps.createVectorstoreServer(hdTool, embeddingProvider);
 		servers.push(server);
 
 		sdkTools.push(

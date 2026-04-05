@@ -1,29 +1,29 @@
-import { describe, expect, it, mock } from "bun:test";
+import { describe, expect, it } from "bun:test";
+import type { AgentConfig } from "../../../../src/config/schema.js";
+import type { VectorstoreDeps } from "../../../../src/tools/vectorstore/registry.js";
+import { buildVectorstoreServers } from "../../../../src/tools/vectorstore/registry.js";
 
 // ---------------------------------------------------------------------------
-// Mocks — must be set up BEFORE importing the module under test
+// Fake deps — injected instead of using mock.module to avoid global pollution
 // ---------------------------------------------------------------------------
 
-mock.module("../../../../src/tools/vectorstore/embeddings/factory.js", () => ({
+const fakeDeps: VectorstoreDeps = {
 	createEmbeddingProvider: () => ({
 		embed: async (texts: string[]) => texts.map(() => new Array(32).fill(0)),
 		dimensions: () => 32,
 	}),
-}));
-
-mock.module("../../../../src/tools/vectorstore/index.js", () => ({
 	createVectorstoreServer: () => ({
-		search: async () => ({ query: "", search_mode: "hybrid", total_results: 0, results: [] }),
+		search: async () => ({
+			query: "",
+			search_mode: "hybrid" as const,
+			total_results: 0,
+			results: [],
+		}),
 		initialize: async () => {},
 		reingest: async () => {},
 		close: async () => {},
 	}),
-}));
-
-// Import AFTER mocks
-const { buildVectorstoreServers } = await import("../../../../src/tools/vectorstore/registry.js");
-
-import type { AgentConfig } from "../../../../src/config/schema.js";
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -94,7 +94,7 @@ const defaultEmbedding = {
 describe("buildVectorstoreServers", () => {
 	it("returns empty when no hierarchical_document tools", () => {
 		const config = makeMinimalConfig([makeMCPTool("my_mcp")]);
-		const result = buildVectorstoreServers(config);
+		const result = buildVectorstoreServers(config, fakeDeps);
 
 		expect(result.mcpServers).toEqual({});
 		expect(result.servers).toHaveLength(0);
@@ -102,7 +102,7 @@ describe("buildVectorstoreServers", () => {
 
 	it("returns empty when tools array is empty", () => {
 		const config = makeMinimalConfig([]);
-		const result = buildVectorstoreServers(config);
+		const result = buildVectorstoreServers(config, fakeDeps);
 
 		expect(result.mcpServers).toEqual({});
 		expect(result.servers).toHaveLength(0);
@@ -110,7 +110,7 @@ describe("buildVectorstoreServers", () => {
 
 	it("creates MCP server for hierarchical_document tool", () => {
 		const config = makeMinimalConfig([makeHDTool("knowledge_base")], defaultEmbedding);
-		const result = buildVectorstoreServers(config);
+		const result = buildVectorstoreServers(config, fakeDeps);
 
 		expect(Object.keys(result.mcpServers)).toEqual(["holodeck_vectorstore"]);
 		expect(result.servers).toHaveLength(1);
@@ -121,7 +121,7 @@ describe("buildVectorstoreServers", () => {
 			[makeHDTool("docs_a"), makeHDTool("docs_b")],
 			defaultEmbedding,
 		);
-		const result = buildVectorstoreServers(config);
+		const result = buildVectorstoreServers(config, fakeDeps);
 
 		expect(Object.keys(result.mcpServers)).toEqual(["holodeck_vectorstore"]);
 		expect(result.servers).toHaveLength(2);
@@ -132,7 +132,7 @@ describe("buildVectorstoreServers", () => {
 			[makeMCPTool("my_mcp"), makeHDTool("knowledge_base"), makeMCPTool("another_mcp")],
 			defaultEmbedding,
 		);
-		const result = buildVectorstoreServers(config);
+		const result = buildVectorstoreServers(config, fakeDeps);
 
 		expect(Object.keys(result.mcpServers)).toEqual(["holodeck_vectorstore"]);
 		expect(result.servers).toHaveLength(1);

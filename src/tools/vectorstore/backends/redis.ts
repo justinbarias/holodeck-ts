@@ -1,9 +1,13 @@
 import type { SearchReply } from "@redis/search";
+import type { FtHybridOptions, HybridSearchResult } from "@redis/search/dist/lib/commands/HYBRID";
 import { createClient } from "redis";
 import { ToolError } from "../../../lib/errors.js";
 import { getModuleLogger } from "../../../lib/logger.js";
 import type {
 	ExactMatchHit,
+	HybridSearchCapable,
+	HybridSearchHit,
+	HybridSearchOptions,
 	IndexableDocument,
 	KeywordSearchBackend,
 	KeywordSearchHit,
@@ -55,7 +59,7 @@ export interface RedisVectorConfig {
  *
  * Lifecycle: call `initialize()` before use, `close()` when done.
  */
-export class RedisVectorBackend implements VectorStoreBackend {
+export class RedisVectorBackend implements VectorStoreBackend, HybridSearchCapable {
 	private readonly config: RedisVectorConfig;
 	private readonly prefix: string;
 	private client: RedisClient | null = null;
@@ -120,6 +124,86 @@ export class RedisVectorBackend implements VectorStoreBackend {
 	 */
 	supportsNativeHybrid(): boolean {
 		return this.nativeHybrid;
+	}
+
+	// -----------------------------------------------------------------------
+	// HybridSearchCapable interface (Redis ≥ 8.4, FT.HYBRID — @experimental)
+	// -----------------------------------------------------------------------
+
+	async hybridSearch(
+		query: string,
+		embedding: number[],
+		topK: number,
+		options?: HybridSearchOptions,
+	): Promise<HybridSearchHit[]> {
+		const client = this.getClient();
+		const vectorBuffer = embeddingToBuffer(embedding);
+		const rrfK = options?.rrfK ?? 60;
+
+		// Escape RediSearch special characters for literal text matching
+		const escapedQuery = query.replace(/[,.<>{}[\]"':;!@#$%^&*()\-+=~|\\/]/g, "\\$&");
+
+		const hybridOptions: FtHybridOptions = {
+			SEARCH: {
+				query: escapedQuery,
+				SCORER: "BM25",
+				YIELD_SCORE_AS: "__text_score",
+			},
+			VSIM: {
+				field: "@embedding",
+				vector: "$BLOB",
+				method: { type: "KNN", K: topK },
+				YIELD_SCORE_AS: "__vector_score",
+			},
+			COMBINE: {
+				method: {
+					type: "RRF",
+					CONSTANT: rrfK,
+					WINDOW: Math.max(150, topK * 10),
+				},
+				YIELD_SCORE_AS: "__hybrid_score",
+			},
+			LOAD: ["id", "content", "metadata"],
+			LIMIT: { offset: 0, count: topK },
+			PARAMS: { BLOB: vectorBuffer },
+		};
+
+		let result: HybridSearchResult;
+		try {
+			result = (await client.ft.hybrid(this.config.indexName, hybridOptions)) as HybridSearchResult;
+		} catch (err) {
+			throw new ToolError(
+				`Redis native hybrid search failed on index '${this.config.indexName}'. ` +
+					"The FT.HYBRID command may not be supported by this Redis version.",
+				{
+					backend: "redis",
+					operation: "hybridSearch",
+					cause: err instanceof Error ? err : undefined,
+				},
+			);
+		}
+
+		// Normalize BM25 scores: raw BM25 scores are unbounded, so we
+		// max-normalize across the result set to produce 0-1 values.
+		const rawTextScores = result.results.map((doc) => Number(doc.__text_score ?? 0));
+		const maxTextScore = Math.max(...rawTextScores, Number.EPSILON);
+
+		return result.results.map((doc, i) => {
+			const rawId = String(doc.id ?? "");
+			const id = rawId.startsWith(this.prefix) ? rawId.slice(this.prefix.length) : rawId;
+
+			// COSINE distance → similarity: RediSearch returns distance [0,2],
+			// convert to similarity [0,1].
+			const rawVectorDist = Number(doc.__vector_score ?? 1);
+			const semanticScore = Math.max(0, Math.min(1, 1 - rawVectorDist / 2));
+
+			const keywordScore = (rawTextScores[i] ?? 0) / maxTextScore;
+
+			// The hybrid score from RRF is the combined server-side score
+			const score = Number(doc.__hybrid_score ?? 0);
+
+			return { id, score, semanticScore, keywordScore };
+		});
 	}
 
 	// -----------------------------------------------------------------------
