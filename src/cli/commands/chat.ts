@@ -107,10 +107,9 @@ export async function runChatCommand(options: ChatCommandOptions): Promise<void>
 	const verbose = Boolean(options.verbose);
 
 	const isTUI = options.prompt === undefined || options.prompt.trim().length === 0;
+	// Initial setup with local sinks only (OTLP wired after config load)
 	await setupLogging({ verbose, tui: isTUI });
 	await loadHolodeckEnv();
-
-	logger.info`Loading agent config from '${agentPath}'`;
 
 	let config: AgentConfig;
 	try {
@@ -134,9 +133,10 @@ export async function runChatCommand(options: ChatCommandOptions): Promise<void>
 		return;
 	}
 
-	if (config.observability) {
-		await setupLogging({ verbose, tui: isTUI, observability: config.observability });
-	}
+	// Re-configure logging with observability (wires OTLP sink + log level)
+	await setupLogging({ verbose, tui: isTUI, observability: config.observability });
+
+	logger.info`Agent config loaded: '${config.name}' from '${agentPath}'`;
 
 	let session: ChatSession;
 	try {

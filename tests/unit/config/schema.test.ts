@@ -444,6 +444,25 @@ describe("ObservabilitySchema", () => {
 		expect(result.exporters?.otlp?.protocol).toBe("http");
 	});
 
+	it("accepts grpc protocol", () => {
+		const result = ObservabilitySchema.safeParse({
+			enabled: true,
+			exporters: { otlp: { protocol: "grpc" } },
+		});
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.data.exporters?.otlp?.protocol).toBe("grpc");
+		}
+	});
+
+	it("rejects invalid protocol", () => {
+		const result = ObservabilitySchema.safeParse({
+			enabled: true,
+			exporters: { otlp: { protocol: "websocket" } },
+		});
+		expect(result.success).toBe(false);
+	});
+
 	it("rejects invalid OTLP endpoint URL", () => {
 		const result = ObservabilitySchema.safeParse({
 			enabled: true,

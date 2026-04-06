@@ -1,4 +1,5 @@
-import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
+import { OTLPLogExporter as OTLPGrpcLogExporter } from "@opentelemetry/exporter-logs-otlp-grpc";
+import { OTLPLogExporter as OTLPHttpLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { BatchLogRecordProcessor, LoggerProvider } from "@opentelemetry/sdk-logs";
 import { ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
@@ -14,14 +15,16 @@ export function initOtelLoggerProvider(config: ObservabilityConfig): LoggerProvi
 
 	const serviceName = config.service_name ?? "holodeck";
 	const endpoint = config.exporters?.otlp?.endpoint ?? "http://localhost:4318";
+	const protocol = config.exporters?.otlp?.protocol ?? "http";
 
 	const resource = resourceFromAttributes({
 		[ATTR_SERVICE_NAME]: serviceName,
 	});
 
-	const exporter = new OTLPLogExporter({
-		url: `${endpoint}/v1/logs`,
-	});
+	const exporter =
+		protocol === "grpc"
+			? new OTLPGrpcLogExporter({ url: endpoint })
+			: new OTLPHttpLogExporter({ url: `${endpoint}/v1/logs` });
 
 	const provider = new LoggerProvider({
 		resource,
@@ -38,6 +41,8 @@ export async function shutdownOtel(): Promise<void> {
 	}
 	const provider = activeProvider;
 	activeProvider = undefined;
+	// Flush buffered log records before shutting down
+	await provider.forceFlush();
 	await provider.shutdown();
 }
 

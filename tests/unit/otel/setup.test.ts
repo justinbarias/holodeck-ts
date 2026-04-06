@@ -66,4 +66,33 @@ describe("otel/setup", () => {
 		const provider = initOtelLoggerProvider(config);
 		expect(provider).toBeInstanceOf(LoggerProvider);
 	});
+
+	it("creates provider with grpc protocol", () => {
+		const config: ObservabilityConfig = {
+			enabled: true,
+			exporters: {
+				otlp: {
+					enabled: true,
+					endpoint: "http://localhost:4317",
+					protocol: "grpc",
+				},
+			},
+		};
+		const provider = initOtelLoggerProvider(config);
+		expect(provider).toBeInstanceOf(LoggerProvider);
+	});
+
+	it("creates provider with http protocol", () => {
+		const provider = initOtelLoggerProvider(baseConfig);
+		expect(provider).toBeInstanceOf(LoggerProvider);
+	});
+
+	it("defaults to http protocol when not specified", () => {
+		const config: ObservabilityConfig = {
+			enabled: true,
+			exporters: { otlp: { enabled: true, endpoint: "http://localhost:4318", protocol: "http" } },
+		};
+		const provider = initOtelLoggerProvider(config);
+		expect(provider).toBeInstanceOf(LoggerProvider);
+	});
 });

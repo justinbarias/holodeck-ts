@@ -41,9 +41,9 @@ observability:
   service_name: research-agent
   logs:
     enabled: true
-    level: info
+    level: debug
   exporters:
     otlp:
       enabled: true
-      endpoint: http://localhost:4318
-      protocol: http
+      endpoint: http://localhost:4317
+      protocol: grpc

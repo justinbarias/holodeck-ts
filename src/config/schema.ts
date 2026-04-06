@@ -184,7 +184,7 @@ export const ClaudeConfigSchema = z.strictObject({
 export const OtlpExporterSchema = z.strictObject({
 	enabled: z.boolean().default(true),
 	endpoint: z.string().url().default("http://localhost:4318"),
-	protocol: z.enum(["http"]).default("http"),
+	protocol: z.enum(["http", "grpc"]).default("http"),
 });
 
 export const ConsoleExporterSchema = z.strictObject({
