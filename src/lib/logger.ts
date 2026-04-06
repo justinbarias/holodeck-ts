@@ -9,10 +9,12 @@ import {
 	type LogLevel,
 	type Sink,
 } from "@logtape/logtape";
+import type { ObservabilityConfig } from "../config/schema.js";
 
 export interface LoggingOptions {
 	verbose: boolean;
 	tui?: boolean;
+	observability?: ObservabilityConfig;
 }
 
 let initialized = false;
@@ -38,19 +40,39 @@ function getStderrSink(): Sink {
 	};
 }
 
+function isOtlpEnabled(obs: ObservabilityConfig | undefined): boolean {
+	if (!obs?.enabled) return false;
+	if (obs.logs?.enabled === false) return false;
+	if (obs.exporters?.otlp?.enabled === false) return false;
+	return true;
+}
+
 export async function setupLogging(options: LoggingOptions): Promise<void> {
-	const key = `${options.verbose}-${options.tui}`;
+	const otelFlag = isOtlpEnabled(options.observability) ? "otel" : "none";
+	const key = `${options.verbose}-${options.tui}-${otelFlag}-${options.observability?.logs?.level ?? "default"}`;
 	if (initialized && initializedKey === key) {
 		return;
 	}
 
-	const appLevel: LogLevel = options.verbose ? "debug" : "info";
+	// Priority: --verbose flag → agent.yaml logs.level → default "info"
+	const configLevel = options.observability?.logs?.level;
+	const appLevel: LogLevel = options.verbose ? "debug" : (configLevel ?? "info");
 
 	const sinks: Record<string, Sink> = options.tui
 		? { file: getFileSink() }
 		: { stderr: getStderrSink() };
 
-	const sinkName = options.tui ? "file" : "stderr";
+	const localSinkName = options.tui ? "file" : "stderr";
+	const holodeckSinks: string[] = [localSinkName];
+
+	if (options.observability && isOtlpEnabled(options.observability)) {
+		const { getOpenTelemetrySink } = await import("@logtape/otel");
+		const { initOtelLoggerProvider } = await import("../otel/setup.js");
+
+		const loggerProvider = initOtelLoggerProvider(options.observability);
+		sinks.otel = getOpenTelemetrySink({ loggerProvider });
+		holodeckSinks.push("otel");
+	}
 
 	await configure({
 		reset: true,
@@ -58,12 +80,12 @@ export async function setupLogging(options: LoggingOptions): Promise<void> {
 		loggers: [
 			{
 				category: ["holodeck"],
-				sinks: [sinkName],
+				sinks: holodeckSinks,
 				lowestLevel: appLevel,
 			},
 			{
 				category: ["logtape"],
-				sinks: [sinkName],
+				sinks: [localSinkName],
 				lowestLevel: "warning",
 			},
 		],

@@ -5,8 +5,11 @@ import { loadAgentConfig } from "../../config/loader.js";
 import type { AgentConfig } from "../../config/schema.js";
 import { loadHolodeckEnv } from "../../lib/env.js";
 import { ConfigError, toErrorMessage } from "../../lib/errors.js";
-import { setupLogging } from "../../lib/logger.js";
+import { getModuleLogger, setupLogging } from "../../lib/logger.js";
+import { shutdownOtel } from "../../otel/setup.js";
 import { launchTUI } from "../tui/app.js";
+
+const logger = getModuleLogger("cli.chat");
 
 interface ChatCommandOptions {
 	agent?: string;
@@ -104,6 +107,7 @@ export async function runChatCommand(options: ChatCommandOptions): Promise<void>
 	const verbose = Boolean(options.verbose);
 
 	const isTUI = options.prompt === undefined || options.prompt.trim().length === 0;
+	// Initial setup with local sinks only (OTLP wired after config load)
 	await setupLogging({ verbose, tui: isTUI });
 	await loadHolodeckEnv();
 
@@ -129,17 +133,26 @@ export async function runChatCommand(options: ChatCommandOptions): Promise<void>
 		return;
 	}
 
+	// Re-configure logging with observability (wires OTLP sink + log level)
+	await setupLogging({ verbose, tui: isTUI, observability: config.observability });
+
+	logger.info`Agent config loaded: '${config.name}' from '${agentPath}'`;
+
 	let session: ChatSession;
 	try {
 		session = await createChatSession(config);
+		logger.info`Chat session created (mode=${isTUI ? "tui" : "single-message"})`;
 	} catch (error) {
+		logger.error`Failed to create chat session: ${toErrorMessage(error)}`;
 		writeStderr(`${toErrorMessage(error)}\n`);
 		process.exitCode = 1;
+		await shutdownOtel();
 		return;
 	}
 
 	if (options.prompt !== undefined && options.prompt.trim().length > 0) {
 		await runSingleMessage(session, options.prompt);
+		await shutdownOtel();
 		return;
 	}
 
@@ -148,6 +161,8 @@ export async function runChatCommand(options: ChatCommandOptions): Promise<void>
 	} catch (error) {
 		writeStderr(formatRuntimeErrorMessage(toErrorMessage(error)));
 		process.exitCode = 2;
+	} finally {
+		await shutdownOtel();
 	}
 }
 

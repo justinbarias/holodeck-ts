@@ -13,6 +13,7 @@ import {
 	LLMProviderSchema,
 	MCPHttpToolSchema,
 	MCPStdioToolSchema,
+	ObservabilitySchema,
 	SubagentsConfigSchema,
 } from "../../../src/config/schema.js";
 
@@ -409,6 +410,96 @@ describe("HierarchicalDocumentToolSchema keyword_search", () => {
 			chunk_overlap: 50,
 		});
 		expect(result.success).toBe(true);
+	});
+});
+
+describe("ObservabilitySchema", () => {
+	it("is optional on AgentConfigSchema", () => {
+		const result = AgentConfigSchema.safeParse({
+			name: "test-agent",
+			model: { provider: "anthropic", name: "claude-sonnet-4-20250514" },
+			instructions: { inline: "You are helpful." },
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it("parses a valid full observability config with defaults", () => {
+		const result = ObservabilitySchema.safeParse({
+			enabled: true,
+			service_name: "my-agent",
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it("applies defaults for nested schemas", () => {
+		const result = ObservabilitySchema.parse({
+			enabled: true,
+			logs: {},
+			exporters: { otlp: {} },
+		});
+		expect(result.logs?.enabled).toBe(true);
+		expect(result.logs?.level).toBe("info");
+		expect(result.exporters?.otlp?.enabled).toBe(true);
+		expect(result.exporters?.otlp?.endpoint).toBe("http://localhost:4318");
+		expect(result.exporters?.otlp?.protocol).toBe("http");
+	});
+
+	it("accepts grpc protocol", () => {
+		const result = ObservabilitySchema.safeParse({
+			enabled: true,
+			exporters: { otlp: { protocol: "grpc" } },
+		});
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.data.exporters?.otlp?.protocol).toBe("grpc");
+		}
+	});
+
+	it("rejects invalid protocol", () => {
+		const result = ObservabilitySchema.safeParse({
+			enabled: true,
+			exporters: { otlp: { protocol: "websocket" } },
+		});
+		expect(result.success).toBe(false);
+	});
+
+	it("rejects invalid OTLP endpoint URL", () => {
+		const result = ObservabilitySchema.safeParse({
+			enabled: true,
+			exporters: { otlp: { endpoint: "not-a-url" } },
+		});
+		expect(result.success).toBe(false);
+	});
+
+	it("rejects unknown fields in strict mode", () => {
+		const result = ObservabilitySchema.safeParse({
+			enabled: true,
+			unknown_field: "oops",
+		});
+		expect(result.success).toBe(false);
+	});
+
+	it("defaults enabled to false", () => {
+		const result = ObservabilitySchema.parse({});
+		expect(result.enabled).toBe(false);
+	});
+
+	it("accepts all log levels", () => {
+		for (const level of ["debug", "info", "warning", "error"]) {
+			const result = ObservabilitySchema.safeParse({
+				enabled: true,
+				logs: { level },
+			});
+			expect(result.success).toBe(true);
+		}
+	});
+
+	it("rejects invalid log level", () => {
+		const result = ObservabilitySchema.safeParse({
+			enabled: true,
+			logs: { level: "trace" },
+		});
+		expect(result.success).toBe(false);
 	});
 });
 

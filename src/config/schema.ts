@@ -181,6 +181,33 @@ export const ClaudeConfigSchema = z.strictObject({
 	setting_sources: z.array(z.enum(["user", "project", "local"])).default(["project"]),
 });
 
+export const OtlpExporterSchema = z.strictObject({
+	enabled: z.boolean().default(true),
+	endpoint: z.string().url().default("http://localhost:4318"),
+	protocol: z.enum(["http", "grpc"]).default("http"),
+});
+
+export const ConsoleExporterSchema = z.strictObject({
+	enabled: z.boolean().default(false),
+});
+
+export const ExportersSchema = z.strictObject({
+	otlp: OtlpExporterSchema.optional(),
+	console: ConsoleExporterSchema.optional(),
+});
+
+export const ObservabilityLogsSchema = z.strictObject({
+	enabled: z.boolean().default(true),
+	level: z.enum(["debug", "info", "warning", "error"]).default("info"),
+});
+
+export const ObservabilitySchema = z.strictObject({
+	enabled: z.boolean().default(false),
+	service_name: z.string().optional(),
+	logs: ObservabilityLogsSchema.optional(),
+	exporters: ExportersSchema.optional(),
+});
+
 export const AgentConfigSchema = z
 	.strictObject({
 		name: z.string().min(1).max(100),
@@ -190,6 +217,7 @@ export const AgentConfigSchema = z
 		embedding_provider: EmbeddingProviderSchema.optional(),
 		tools: z.array(ToolSchema).max(50).default([]),
 		claude: ClaudeConfigSchema.optional(),
+		observability: ObservabilitySchema.optional(),
 	})
 	.superRefine((value, context) => {
 		const seen = new Set<string>();
@@ -229,4 +257,9 @@ export type FileSystemConfig = z.infer<typeof FileSystemConfigSchema>;
 export type ExtendedThinking = z.infer<typeof ExtendedThinkingSchema>;
 export type SubagentsConfig = z.infer<typeof SubagentsConfigSchema>;
 export type ClaudeConfig = z.infer<typeof ClaudeConfigSchema>;
+export type OtlpExporter = z.infer<typeof OtlpExporterSchema>;
+export type ConsoleExporter = z.infer<typeof ConsoleExporterSchema>;
+export type Exporters = z.infer<typeof ExportersSchema>;
+export type ObservabilityLogs = z.infer<typeof ObservabilityLogsSchema>;
+export type ObservabilityConfig = z.infer<typeof ObservabilitySchema>;
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;
